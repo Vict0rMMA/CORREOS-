@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, PlaneTakeoff } from "lucide-react";
+import { ChevronDown, Loader2, PlaneTakeoff } from "lucide-react";
+import { useState } from "react";
 import { QUICK_ACTIONS } from "@/lib/actions";
 import { cn } from "@/lib/utils";
 import type { Action } from "@/types";
@@ -12,15 +13,28 @@ interface QuickActionsProps {
 }
 
 export function QuickActions({ running, disabled, onRun }: QuickActionsProps) {
+  // En movil ocupaban media pantalla de fichas: van plegadas y se abren al tocar.
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
-      <div className="mb-2.5 flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="-my-1 mb-1.5 flex min-h-9 w-full items-center gap-1.5 py-1 sm:my-0 sm:mb-2.5 sm:min-h-0 sm:py-0 sm:pointer-events-none"
+      >
         <PlaneTakeoff aria-hidden className="size-3.5 text-accent" />
-        <h2 className="eyebrow">
-          Acciones rápidas
-        </h2>
-      </div>
-      <div className="flex flex-wrap gap-2">
+        <h2 className="eyebrow">Acciones rápidas</h2>
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "ml-auto size-4 text-muted transition-transform duration-200 sm:hidden",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      <div className={cn("flex-wrap gap-2 sm:flex", open ? "flex" : "hidden")}>
         {QUICK_ACTIONS.map((action) => {
           const isRunning = running === action.id;
           return (

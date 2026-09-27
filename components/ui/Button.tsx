@@ -21,8 +21,8 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 const SIZES: Record<Size, string> = {
-  sm: "h-8.5 px-3 text-[13px] gap-1.5 rounded-[10px]",
-  md: "h-10 px-4 text-sm gap-2 rounded-xl",
+  sm: "h-9.5 px-3 text-[13px] gap-1.5 rounded-[10px] sm:h-8.5",
+  md: "h-11 px-4 text-sm gap-2 rounded-xl sm:h-10",
   lg: "h-11 px-5 text-[15px] gap-2 rounded-xl",
 };
 
@@ -58,10 +58,10 @@ export function Button({
       {...rest}
     >
       {loading ? (
-        <Loader2 aria-hidden className="size-4 animate-spin" />
-      ) : (
-        icon
-      )}
+        <Loader2 aria-hidden className="size-4 shrink-0 animate-spin" />
+      ) : icon ? (
+        <span className="grid shrink-0 place-items-center">{icon}</span>
+      ) : null}
       {children}
     </button>
   );

@@ -25,6 +25,7 @@ interface OutputPanelProps {
   onDownloadPdf: () => void;
   onPrint: () => void;
   busyExport: "docx" | "pdf" | null;
+  className?: string;
 }
 
 /** Carril de ruta con un avion recorriendolo: el estado "en vuelo". */
@@ -55,6 +56,7 @@ export function OutputPanel({
   onDownloadPdf,
   onPrint,
   busyExport,
+  className,
 }: OutputPanelProps) {
   const [copied, setCopied] = useState<"rich" | "plain" | null>(null);
   const loading = status === "loading";
@@ -68,7 +70,7 @@ export function OutputPanel({
   };
 
   return (
-    <Panel>
+    <Panel className={className}>
       <PanelHeader>
         <PanelTitle>Resultado</PanelTitle>
         <StatusBadge status={status} />
@@ -93,7 +95,7 @@ export function OutputPanel({
         ) : null}
       </PanelHeader>
 
-      <div className="scroll-slim min-h-[260px] flex-1 overflow-y-auto px-4 py-4 sm:px-5 lg:min-h-[420px]">
+      <div className="scroll-slim min-h-[190px] flex-1 overflow-y-auto px-4 py-4 sm:px-5 lg:min-h-[420px]">
         {hasOutput ? (
           <p
             className={cn(

@@ -8,10 +8,10 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/config";
 export function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <header className="print-hidden sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md">
-      <div className="mx-auto flex h-16 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-2.5 px-3 sm:h-16 sm:gap-3 sm:px-6">
         <Logo />
         <div className="min-w-0">
-          <p className="title-serif truncate text-[23px] text-ink">{APP_NAME}</p>
+          <p className="title-serif truncate text-[20px] text-ink sm:text-[23px]">{APP_NAME}</p>
           <p className="hidden truncate text-[11px] tracking-[0.02em] text-muted sm:block">
             {APP_TAGLINE}
           </p>

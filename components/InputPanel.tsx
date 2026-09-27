@@ -22,6 +22,7 @@ interface InputPanelProps {
   onPaste: () => void;
   pasteEnabled: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  className?: string;
 }
 
 export function InputPanel({
@@ -35,6 +36,7 @@ export function InputPanel({
   onPaste,
   pasteEnabled,
   textareaRef,
+  className,
 }: InputPanelProps) {
   const { toast } = useToast();
   const [dragging, setDragging] = useState(false);
@@ -86,7 +88,7 @@ export function InputPanel({
   };
 
   return (
-    <Panel>
+    <Panel className={className}>
       <PanelHeader>
         <PanelTitle>Tu texto</PanelTitle>
         {detectedLang ? (
@@ -121,7 +123,7 @@ export function InputPanel({
         spellCheck={false}
         placeholder={"Escribe, pega o dicta tu texto aquí...\n\nEjemplo: Hola profe, quería preguntarle si puedo faltar el viernes porque tengo otra clase."}
         className={cn(
-          "scroll-slim min-h-[260px] flex-1 resize-none bg-transparent px-4 py-4 text-[16px]",
+          "scroll-slim min-h-[190px] flex-1 resize-none bg-transparent px-4 py-4 text-[16px]",
           "leading-[1.75] text-ink outline-none placeholder:text-muted/70 sm:px-5 lg:min-h-[420px]",
           dragging && "bg-accent-soft/40",
         )}

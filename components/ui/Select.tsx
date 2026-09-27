@@ -42,7 +42,7 @@ export function Select<T extends string>({
           className={cn(
             // min-w-0: un <select> nativo no baja de la anchura de su opcion mas
             // larga y desbordaria la pantalla en moviles estrechos.
-            "h-9.5 w-full min-w-0 cursor-pointer appearance-none rounded-xl border border-line bg-surface",
+            "h-11 w-full min-w-0 cursor-pointer appearance-none rounded-xl border border-line bg-surface sm:h-9.5",
             "pl-3 pr-8 text-sm text-ink transition-colors hover:border-line-strong",
           )}
         >

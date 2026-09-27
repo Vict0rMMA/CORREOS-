@@ -20,6 +20,7 @@ import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import { downloadDocx } from "@/lib/export/docx";
 import { downloadPdf } from "@/lib/export/pdf";
 import { resolveTargetLang } from "@/lib/prompts";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_PREFS,
   clearHistory as clearStoredHistory,
@@ -70,6 +71,8 @@ export function Workspace() {
   const [route, setRoute] = useState<Route | null>(null);
   /** El modelo devolvio exactamente el mismo texto (no hizo falta cambiar nada). */
   const [unchanged, setUnchanged] = useState(false);
+  /** En movil solo cabe un panel a la vez: cual se esta viendo. */
+  const [mobileView, setMobileView] = useState<"input" | "output">("input");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [pasteEnabled, setPasteEnabled] = useState(false);
@@ -165,6 +168,7 @@ export function Workspace() {
       setError(null);
       setOutput("");
       setUnchanged(false);
+      setMobileView("output");
       // La ruta solo tiene sentido cuando el texto cambia de idioma.
       setRoute(target === lang ? null : { from: lang.toUpperCase(), to: target.toUpperCase() });
 
@@ -207,6 +211,7 @@ export function Workspace() {
         setOutput(finalText);
         setStatus("done");
         setUnchanged(finalText === source);
+        setMobileView("output");
 
         pushHistory({
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -336,6 +341,7 @@ export function Workspace() {
     setRoute(null);
     setLangOverride(null);
     setImages([]);
+    setMobileView("input");
     setSubject("");
     setSubjectOptions([]);
     setStatus("idle");
@@ -351,6 +357,7 @@ export function Workspace() {
     setPrefs((current) => ({ ...current, tone: item.tone, textType: item.textType }));
     setPrimaryAction(item.action);
     setStatus("done");
+    setMobileView("output");
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
@@ -403,8 +410,8 @@ export function Workspace() {
     <>
       <Header onOpenSettings={() => setSettingsOpen(true)} />
 
-      <main className="print-hidden relative z-10 mx-auto w-full max-w-[1400px] px-4 pb-16 pt-5 sm:px-6 sm:pt-6">
-        <div className="flex flex-col gap-4">
+      <main className="print-hidden relative z-10 mx-auto w-full max-w-[1400px] px-3 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-16 sm:pt-6">
+        <div className="flex flex-col gap-3 sm:gap-4">
           <LanguageRoute
             source={lang}
             onSourceChange={(value) => {
@@ -444,8 +451,44 @@ export function Workspace() {
             onImagesChange={setImages}
           />
 
+          {/* En movil se ve un panel a la vez: dos cuadros altos obligaban a
+              demasiado scroll. En pantalla grande siguen lado a lado. */}
+          <div
+            role="tablist"
+            aria-label="Paneles"
+            className="glass flex gap-1 rounded-xl border border-line p-1 shadow-panel lg:hidden"
+          >
+            {(
+              [
+                { id: "input" as const, label: "Tu texto" },
+                { id: "output" as const, label: "Resultado" },
+              ]
+            ).map((tab) => {
+              const active = mobileView === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setMobileView(tab.id)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-medium transition-colors",
+                    active ? "bg-accent text-accent-ink" : "text-muted hover:text-ink",
+                  )}
+                >
+                  {tab.label}
+                  {tab.id === "output" && output && !active ? (
+                    <span aria-hidden className="size-1.5 rounded-full bg-accent" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <InputPanel
+              className={cn(mobileView === "input" ? "flex" : "hidden", "lg:flex")}
               value={text}
               onChange={(value) => {
                 setText(value);
@@ -462,6 +505,7 @@ export function Workspace() {
             />
 
             <OutputPanel
+              className={cn(mobileView === "output" ? "flex" : "hidden", "lg:flex")}
               output={output}
               status={status}
               error={error}
@@ -483,7 +527,7 @@ export function Workspace() {
               onRun={(action) => void run(action)}
               translateTarget={targetLang === "es" ? "español" : "inglés"}
             />
-            <p className="text-xs text-muted">
+            <p className="hidden text-xs text-muted sm:block">
               <kbd className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-sans text-[11px] text-ink-soft">
                 Ctrl + Enter
               </kbd>{" "}

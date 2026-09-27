@@ -30,7 +30,7 @@ export function ActionsRow({
   translateTarget,
 }: ActionsRowProps) {
   return (
-    <div className="print-hidden flex flex-wrap gap-2">
+    <div className="print-hidden grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
       {MAIN_ACTIONS.map((action) => (
         <Button
           key={action.id}
@@ -40,14 +40,13 @@ export function ActionsRow({
           disabled={disabled}
           loading={running === action.id}
           title={action.hint}
-          className="flex-1 sm:flex-none"
+          className="w-full justify-start px-3.5 sm:w-auto sm:justify-center sm:px-5"
           icon={ICONS[action.id]}
         >
           {action.id === "translate" ? (
-            <>
-              {action.label}
-              <span className="ml-0.5 font-semibold opacity-80">a {translateTarget}</span>
-            </>
+            <span className="truncate">
+              {action.label} a <span className="font-semibold">{translateTarget}</span>
+            </span>
           ) : (
             action.label
           )}
