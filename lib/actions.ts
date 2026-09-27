@@ -52,11 +52,6 @@ export const TEXT_TYPES: { id: TextType; label: string }[] = [
   { id: "email", label: "Correo" },
   { id: "report", label: "Reporte" },
   { id: "message", label: "Mensaje" },
-  { id: "academic", label: "Texto académico" },
-  { id: "work", label: "Trabajo" },
-  { id: "request", label: "Solicitud" },
-  { id: "reply", label: "Respuesta" },
-  { id: "general", label: "General" },
 ];
 
 export const ALL_ACTIONS = Object.keys(ACTION_LABELS) as Action[];

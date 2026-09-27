@@ -42,7 +42,7 @@ export function OptionsBar({
   const isReport = textType === "report";
 
   return (
-    <div className="print-hidden rounded-2xl border border-line bg-surface p-3 shadow-panel sm:p-4">
+    <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
       {/* grid-cols-1 explicito: sin el, la columna implicita toma el ancho
           maximo del <select> y desborda en pantallas estrechas. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]">

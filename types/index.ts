@@ -8,15 +8,7 @@ export type Tone =
   | "academic"
   | "concise";
 
-export type TextType =
-  | "email"
-  | "report"
-  | "message"
-  | "academic"
-  | "work"
-  | "request"
-  | "reply"
-  | "general";
+export type TextType = "email" | "report" | "message";
 
 /** Foto adjunta a un reporte, ya normalizada a JPEG. */
 export interface ReportImage {

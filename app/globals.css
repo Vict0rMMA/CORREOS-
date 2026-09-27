@@ -9,6 +9,7 @@
 :root {
   --canvas: #f3f6fb;
   --surface: #ffffff;
+  --surface-glass: rgb(255 255 255 / 0.86);
   --surface-soft: #f7fafd;
   --line: #e3e9f2;
   --line-strong: #c9d4e3;
@@ -19,7 +20,10 @@
   --accent-soft: #e7f0fe;
   --accent-ink: #ffffff;
   --accent-glow: rgb(10 99 210 / 0.45);
-  --sky-glow: rgb(10 99 210 / 0.09);
+  --sky-glow: rgb(10 99 210 / 0.10);
+  --sky-glow-2: rgb(94 164 255 / 0.10);
+  --sky-dot: rgb(14 26 43 / 0.07);
+  --cloud: rgb(255 255 255 / 0.55);
   --success: #0f7a52;
   --danger: #b3261e;
   --shadow-panel: 0 1px 1px rgb(14 26 43 / 0.03), 0 2px 6px -2px rgb(14 26 43 / 0.06),
@@ -29,6 +33,7 @@
 .dark {
   --canvas: #070b12;
   --surface: #0f1622;
+  --surface-glass: rgb(15 22 34 / 0.84);
   --surface-soft: #151e2c;
   --line: #1f2a3a;
   --line-strong: #2d3c50;
@@ -39,7 +44,10 @@
   --accent-soft: #10243d;
   --accent-ink: #05101d;
   --accent-glow: rgb(95 168 255 / 0.35);
-  --sky-glow: rgb(95 168 255 / 0.10);
+  --sky-glow: rgb(95 168 255 / 0.11);
+  --sky-glow-2: rgb(58 110 210 / 0.10);
+  --sky-dot: rgb(140 185 255 / 0.09);
+  --cloud: rgb(95 168 255 / 0.07);
   --success: #3ec98d;
   --danger: #ff8078;
   --shadow-panel: 0 1px 1px rgb(0 0 0 / 0.5), 0 2px 8px -3px rgb(0 0 0 / 0.5),
@@ -49,6 +57,7 @@
 @theme inline {
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
+  --color-surface-glass: var(--surface-glass);
   --color-surface-soft: var(--surface-soft);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
@@ -77,13 +86,14 @@
   body {
     background-color: var(--canvas);
     letter-spacing: -0.005em;
-    /* Resplandor de horizonte: el cielo empieza arriba de la pagina. */
-    background-image: radial-gradient(
-      1100px 380px at 50% -180px,
-      var(--sky-glow),
-      transparent 72%
-    );
-    background-repeat: no-repeat;
+    /* Tres capas: horizonte arriba, resplandor al fondo y la reticula de
+       puntos de una carta de navegacion aerea. */
+    background-image:
+      radial-gradient(1100px 380px at 50% -200px, var(--sky-glow), transparent 72%),
+      radial-gradient(760px 520px at 105% 105%, var(--sky-glow-2), transparent 70%),
+      radial-gradient(circle, var(--sky-dot) 1px, transparent 1.2px);
+    background-size: auto, auto, 24px 24px;
+    background-repeat: no-repeat, no-repeat, repeat;
     background-attachment: fixed;
     color: var(--ink);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
@@ -186,6 +196,59 @@
   }
 
   /* El avion recorre la ruta mientras la IA trabaja */
+  /* Panel translucido: deja intuir el cielo y los aviones que pasan detras */
+  .glass {
+    background-color: var(--surface-glass);
+    backdrop-filter: blur(10px) saturate(1.05);
+    -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  }
+
+  /* Cielo de fondo: aviones lejanos cruzando */
+  .ambient-sky {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .ambient-plane {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    animation: cruise linear infinite;
+    will-change: transform;
+  }
+
+  .ambient-plane-back {
+    animation-name: cruise-back;
+  }
+
+  .ambient-cloud {
+    position: absolute;
+    border-radius: 9999px;
+    background: radial-gradient(closest-side, var(--cloud), transparent 70%);
+    filter: blur(22px);
+    animation: drift ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  .ambient-trail {
+    display: block;
+    height: 1px;
+    width: 4.5rem;
+    background: linear-gradient(90deg, transparent, currentColor);
+  }
+
+  .animate-hover-soft {
+    animation: hover-soft 4.5s ease-in-out infinite;
+  }
+
+  .animate-taxi {
+    animation: taxi 11s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  }
+
   .animate-fly {
     animation: fly 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   }
@@ -238,6 +301,63 @@
 }
 
 /* El avion va de un extremo al otro de la ruta (posicion absoluta en el carril) */
+/* Avion de fondo: cruza la pantalla despacio, de lado a lado */
+@keyframes cruise {
+  from {
+    transform: translate3d(-18vw, 0, 0);
+  }
+  to {
+    transform: translate3d(118vw, 0, 0);
+  }
+}
+
+/* Vuelo en sentido contrario */
+@keyframes cruise-back {
+  from {
+    transform: translate3d(118vw, 0, 0) scaleX(-1);
+  }
+  to {
+    transform: translate3d(-18vw, 0, 0) scaleX(-1);
+  }
+}
+
+/* Nubes: deriva muy lenta, casi imperceptible */
+@keyframes drift {
+  from {
+    transform: translate3d(-12%, 0, 0);
+  }
+  to {
+    transform: translate3d(12%, 0, 0);
+  }
+}
+
+/* Flotacion suave del avion en reposo */
+@keyframes hover-soft {
+  0%,
+  100% {
+    transform: translateY(0) rotate(45deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(45deg);
+  }
+}
+
+/* El avion de la cabecera recorre su ruta */
+@keyframes taxi {
+  0% {
+    left: 0;
+    opacity: 0;
+  }
+  8%,
+  92% {
+    opacity: 0.9;
+  }
+  100% {
+    left: calc(100% - 1rem);
+    opacity: 0;
+  }
+}
+
 @keyframes fly {
   0% {
     left: 0;
@@ -256,6 +376,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ambient-sky {
+    display: none;
+  }
+
   *,
   *::before,
   *::after {

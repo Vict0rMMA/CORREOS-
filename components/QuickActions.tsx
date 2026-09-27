@@ -13,7 +13,7 @@ interface QuickActionsProps {
 
 export function QuickActions({ running, disabled, onRun }: QuickActionsProps) {
   return (
-    <div className="print-hidden rounded-2xl border border-line bg-surface p-3 shadow-panel sm:p-4">
+    <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
       <div className="mb-2.5 flex items-center gap-1.5">
         <PlaneTakeoff aria-hidden className="size-3.5 text-accent" />
         <h2 className="eyebrow">

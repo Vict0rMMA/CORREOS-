@@ -33,7 +33,7 @@ export function LanguageRoute({
   onSwap,
 }: LanguageRouteProps) {
   return (
-    <div className="print-hidden rounded-2xl border border-line bg-surface p-3 shadow-panel sm:p-4">
+    <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex min-w-0 flex-col gap-1.5">
           <span className="eyebrow">

@@ -63,13 +63,9 @@ const TONE_INSTRUCTIONS: Record<Tone, string> = {
  */
 const TEXT_TYPE_INSTRUCTIONS: Record<TextType, string> = {
   email: "an email",
-  report: "a report: factual and well organized, with a clear opening, the findings or events in order, and a short conclusion; no email greetings or closings",
+  report:
+    "a report: factual and well organized, with a clear opening, the findings or events in order, and a short conclusion; no email greetings or closings",
   message: "a short message (chat or instant messaging), without email formalities",
-  academic: "an academic text for a university context",
-  work: "a work text in a business context",
-  request: "a request: it asks for something",
-  reply: "a reply to a previous message",
-  general: "a general text",
 };
 
 const LANG_NAMES: Record<Lang, string> = {

@@ -12,7 +12,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        "flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-panel",
+        "glass flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line shadow-panel",
         className,
       )}
     >

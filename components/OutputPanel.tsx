@@ -36,7 +36,7 @@ function FlightStrip({ flying }: { flying: boolean }) {
         aria-hidden
         className={cn(
           "absolute size-5 rotate-45 text-accent",
-          flying ? "animate-fly" : "right-0",
+          flying ? "animate-fly" : "animate-hover-soft right-0",
         )}
         style={flying ? { top: "50%", marginTop: "-0.625rem" } : undefined}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { Plane, Settings } from "lucide-react";
 import { FlightPath, Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
@@ -17,7 +17,11 @@ export function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
           </p>
         </div>
 
-        <FlightPath className="mx-4 hidden sm:block" />
+        {/* Ruta de la cabecera, con su vuelo recorriendola */}
+        <span aria-hidden className="relative mx-4 hidden flex-1 items-center sm:flex">
+          <FlightPath />
+          <Plane className="animate-taxi absolute size-4 rotate-45 text-accent" />
+        </span>
 
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />

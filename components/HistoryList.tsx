@@ -19,7 +19,7 @@ export function HistoryList({ items, onRestore, onClear }: HistoryListProps) {
   if (items.length === 0) return null;
 
   return (
-    <section className="print-hidden rounded-2xl border border-line bg-surface shadow-panel">
+    <section className="glass print-hidden rounded-2xl border border-line shadow-panel">
       <div className="flex items-center gap-2 px-3 py-2.5 sm:px-4">
         <History aria-hidden className="size-3.5 text-muted" />
         <h2 className="eyebrow">
@@ -69,7 +69,7 @@ export function HistoryList({ items, onRestore, onClear }: HistoryListProps) {
                   <span>{item.lang === "es" ? "Español" : "Inglés"}</span>
                   <span aria-hidden>&middot;</span>
                   <span>
-                    {TEXT_TYPES.find((type) => type.id === item.textType)?.label ?? "General"}
+                    {TEXT_TYPES.find((type) => type.id === item.textType)?.label ?? "Texto"}
                   </span>
                   <span aria-hidden>&middot;</span>
                   <time dateTime={new Date(item.createdAt).toISOString()}>

@@ -1,3 +1,4 @@
+import { isTextType, isTone } from "@/lib/actions";
 import { HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
 import type { HistoryItem, Prefs } from "@/types";
 
@@ -35,7 +36,18 @@ function write(key: string, value: unknown): void {
 
 export function loadPrefs(): Prefs {
   const stored = read<Partial<Prefs>>(STORAGE_KEYS.prefs);
-  return { ...DEFAULT_PREFS, ...(stored ?? {}) };
+  const merged = { ...DEFAULT_PREFS, ...(stored ?? {}) };
+
+  // Lo guardado puede venir de una version anterior con otras opciones:
+  // cualquier valor que ya no exista vuelve al predeterminado.
+  return {
+    ...merged,
+    lang: merged.lang === "en" ? "en" : "es",
+    targetLang: merged.targetLang === "es" ? "es" : "en",
+    tone: isTone(merged.tone) ? merged.tone : DEFAULT_PREFS.tone,
+    textType: isTextType(merged.textType) ? merged.textType : DEFAULT_PREFS.textType,
+    signature: typeof merged.signature === "string" ? merged.signature : "",
+  };
 }
 
 export function savePrefs(prefs: Prefs): void {
@@ -62,7 +74,16 @@ export function saveDraft(text: string): void {
 
 export function loadHistory(): HistoryItem[] {
   const stored = read<HistoryItem[]>(STORAGE_KEYS.history);
-  return Array.isArray(stored) ? stored : [];
+  if (!Array.isArray(stored)) return [];
+
+  // Igual que las preferencias: normalizamos lo que venga de versiones viejas.
+  return stored
+    .filter((item) => item && typeof item.input === "string" && typeof item.output === "string")
+    .map((item) => ({
+      ...item,
+      tone: isTone(item.tone) ? item.tone : DEFAULT_PREFS.tone,
+      textType: isTextType(item.textType) ? item.textType : DEFAULT_PREFS.textType,
+    }));
 }
 
 export function saveHistory(items: HistoryItem[]): void {

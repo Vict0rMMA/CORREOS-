@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, Inter } from "next/font/google";
+import { AmbientSky } from "@/components/AmbientSky";
 import { ToastProvider } from "@/components/ui/Toast";
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from "@/lib/config";
 import "./globals.css";
@@ -46,6 +47,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className={`${inter.variable} ${display.variable} font-sans antialiased`}>
+        <AmbientSky />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

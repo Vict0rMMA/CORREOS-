@@ -6,8 +6,9 @@ export function Logo({ className }: { className?: string }) {
     <span
       aria-hidden
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink",
-        "shadow-[0_2px_8px_-2px_var(--accent-glow)]",
+        "group grid size-9 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink",
+        "shadow-[0_2px_8px_-2px_var(--accent-glow)] transition-transform duration-300",
+        "hover:-translate-y-0.5 hover:rotate-3",
         className,
       )}
     >

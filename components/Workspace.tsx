@@ -403,7 +403,7 @@ export function Workspace() {
     <>
       <Header onOpenSettings={() => setSettingsOpen(true)} />
 
-      <main className="print-hidden mx-auto w-full max-w-[1400px] px-4 pb-16 pt-5 sm:px-6 sm:pt-6">
+      <main className="print-hidden relative z-10 mx-auto w-full max-w-[1400px] px-4 pb-16 pt-5 sm:px-6 sm:pt-6">
         <div className="flex flex-col gap-4">
           <LanguageRoute
             source={lang}
