@@ -2,20 +2,40 @@
  * Preparacion del audio dictado.
  *
  * El navegador graba en WebM/Opus, que la API de IA no acepta. Aqui lo
- * decodificamos, lo pasamos a mono 16 kHz (voz limpia y archivo pequeno) y lo
+ * decodificamos, lo pasamos a mono 16 kHz, le igualamos el volumen y lo
  * guardamos como WAV, que si es un formato aceptado.
+ *
+ * Igualar el volumen importa de verdad: con la voz lejos del microfono la
+ * transcripcion se come letras y palabras cortas (medido: una placa "AX4471"
+ * se transcribia "X4471" y al normalizar volvia a salir completa).
  */
 
 const TARGET_SAMPLE_RATE = 16000;
 
+/** Nivel medio al que llevamos la voz. */
+const TARGET_RMS = 0.12;
+/** Tope de amplificacion: mas alla solo se amplifica el ruido. */
+const MAX_GAIN = 14;
+/** Margen para no saturar. */
+const PEAK_CEILING = 0.97;
+
+/** Por debajo de esto consideramos que no hay voz. */
+const SILENCE_LEVEL = 0.012;
+
 /**
- * Duracion maxima de una grabacion, en segundos.
+ * Duracion maxima de un segmento, en segundos.
  *
- * El limite real lo pone el servidor: Vercel rechaza peticiones de mas de
- * 4,5 MB. Un WAV mono de 16 kHz ocupa 32 KB por segundo, asi que 110 s son
- * unos 3,4 MB: entra con margen de sobra.
+ * El dictado no tiene limite: se parte en segmentos que se transcriben sobre
+ * la marcha. Cada uno debe caber en una peticion (Vercel corta en 4,5 MB y un
+ * WAV mono de 16 kHz ocupa 32 KB por segundo, asi que 90 s son unos 2,9 MB).
  */
-export const MAX_RECORDING_SECONDS = 110;
+export const SEGMENT_MAX_SECONDS = 90;
+
+/** Silencio que da por terminada una frase y cierra el segmento. */
+export const SILENCE_SPLIT_MS = 1100;
+
+/** Un segmento no se corta antes de esto, para no trocear de mas. */
+export const MIN_SEGMENT_SECONDS = 5;
 
 /** Tamano maximo que aceptamos subir (por debajo del limite de Vercel). */
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -41,7 +61,49 @@ export function isRecordingSupported(): boolean {
   );
 }
 
-/** Convierte la grabacion en un WAV mono de 16 kHz. */
+/** Quita el silencio del principio y del final, dejando un respiro. */
+function trimSilence(samples: Float32Array, sampleRate: number): Float32Array {
+  const padding = Math.round(sampleRate * 0.15);
+  let first = 0;
+  let last = samples.length - 1;
+
+  while (first < samples.length && Math.abs(samples[first]) < SILENCE_LEVEL) first += 1;
+  while (last > first && Math.abs(samples[last]) < SILENCE_LEVEL) last -= 1;
+  if (first >= last) return samples;
+
+  return samples.slice(Math.max(0, first - padding), Math.min(samples.length, last + padding));
+}
+
+/** Lleva la voz a un volumen constante, sin saturar ni inflar el ruido. */
+function normalize(samples: Float32Array): Float32Array {
+  let peak = 0;
+  let sumSquares = 0;
+  let active = 0;
+
+  for (const value of samples) {
+    const magnitude = Math.abs(value);
+    if (magnitude > peak) peak = magnitude;
+    // La media se calcula solo sobre lo que suena: los silencios la falsean.
+    if (magnitude > SILENCE_LEVEL) {
+      sumSquares += value * value;
+      active += 1;
+    }
+  }
+
+  if (active === 0 || peak === 0) return samples;
+
+  const rms = Math.sqrt(sumSquares / active);
+  const gain = Math.min(TARGET_RMS / rms, MAX_GAIN, PEAK_CEILING / peak);
+  if (gain <= 1.02) return samples;
+
+  const output = new Float32Array(samples.length);
+  for (let index = 0; index < samples.length; index += 1) {
+    output[index] = Math.max(-1, Math.min(1, samples[index] * gain));
+  }
+  return output;
+}
+
+/** Convierte la grabacion en un WAV mono de 16 kHz, recortado y nivelado. */
 export async function toWav(blob: Blob): Promise<Blob> {
   const buffer = await blob.arrayBuffer();
 
@@ -67,7 +129,8 @@ export async function toWav(blob: Blob): Promise<Blob> {
   source.start(0);
   const rendered = await offline.startRendering();
 
-  return encodeWav(rendered.getChannelData(0), TARGET_SAMPLE_RATE);
+  const prepared = normalize(trimSilence(rendered.getChannelData(0), TARGET_SAMPLE_RATE));
+  return encodeWav(prepared, TARGET_SAMPLE_RATE);
 }
 
 /** PCM de 16 bits en un contenedor WAV. */

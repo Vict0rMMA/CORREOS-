@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  MAX_RECORDING_SECONDS,
   MAX_UPLOAD_BYTES,
+  MIN_SEGMENT_SECONDS,
+  SEGMENT_MAX_SECONDS,
+  SILENCE_SPLIT_MS,
   isRecordingSupported,
   pickRecordingMimeType,
   toWav,
@@ -11,19 +13,23 @@ import {
 import type { Lang } from "@/types";
 
 /**
- * Dictado por voz: graba con el microfono y transcribe en el servidor.
+ * Dictado por voz continuo.
  *
- * Se hace asi, y no con el reconocimiento del navegador, porque aquel depende
- * de un servicio de Chrome que falla a menudo, corta por silencios y devuelve
- * el texto sin acentos ni puntuacion. Grabando, la transcripcion llega con
- * puntuacion, tildes y ninguna dependencia del navegador.
+ * Graba con el microfono y transcribe en el servidor. Para que no se pierda
+ * nada de lo que se dice, la grabacion se parte en segmentos **en las pausas
+ * naturales**: cuando detecta silencio cierra el segmento, lo manda a
+ * transcribir y sigue grabando sin interrupcion. Asi se puede hablar todo lo
+ * que haga falta (no hay limite de duracion), el texto va apareciendo por el
+ * camino y ningun corte cae en mitad de una palabra.
+ *
+ * Los segmentos se transcriben en paralelo pero se escriben en orden.
  */
 
 export type DictationState = "idle" | "recording" | "transcribing";
 
 export interface DictationOptions {
   lang: Lang;
-  /** Recibe el texto transcrito para anadirlo al cuadro. */
+  /** Recibe cada trozo transcrito, ya en orden, para anadirlo al cuadro. */
   onText: (text: string) => void;
   onError: (message: string) => void;
 }
@@ -31,10 +37,12 @@ export interface DictationOptions {
 export interface Dictation {
   supported: boolean;
   state: DictationState;
-  /** Segundos grabados. */
+  /** Segundos hablados en total. */
   seconds: number;
   /** Volumen de entrada de 0 a 1, para el indicador. */
   level: number;
+  /** Segmentos que se estan transcribiendo ahora mismo. */
+  pending: number;
   start: () => void;
   stop: () => void;
   cancel: () => void;
@@ -46,6 +54,7 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
   const [state, setState] = useState<DictationState>("idle");
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
+  const [pending, setPending] = useState(0);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -53,9 +62,20 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
   const audioContextRef = useRef<AudioContext | null>(null);
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
+
   const cancelledRef = useRef(false);
-  /** Volumen maximo captado: si nunca sube, el microfono no oyo nada. */
+  const listeningRef = useRef(false);
+  const mimeTypeRef = useRef<string>("audio/webm");
+
+  /** Control del corte por silencio. */
+  const segmentStartRef = useRef(0);
+  const silenceSinceRef = useRef<number | null>(null);
   const peakRef = useRef(0);
+
+  /** Orden de escritura: los segmentos se emiten como se grabaron. */
+  const nextIndexRef = useRef(0);
+  const writeIndexRef = useRef(0);
+  const bufferRef = useRef(new Map<number, string>());
 
   const onTextRef = useRef(onText);
   const onErrorRef = useRef(onError);
@@ -68,6 +88,17 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
 
   useEffect(() => {
     setSupported(isRecordingSupported());
+  }, []);
+
+  /** Escribe en orden: si llega antes un segmento posterior, espera su turno. */
+  const emit = useCallback((index: number, text: string) => {
+    bufferRef.current.set(index, text);
+    while (bufferRef.current.has(writeIndexRef.current)) {
+      const value = bufferRef.current.get(writeIndexRef.current) ?? "";
+      bufferRef.current.delete(writeIndexRef.current);
+      writeIndexRef.current += 1;
+      if (value) onTextRef.current(value);
+    }
   }, []);
 
   /** Suelta microfono, medidor y contador. */
@@ -84,36 +115,107 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
     setLevel(0);
   }, []);
 
-  const transcribe = useCallback(async (recorded: Blob) => {
-    setState("transcribing");
-    try {
-      const wav = await toWav(recorded);
-      if (wav.size > MAX_UPLOAD_BYTES) {
-        throw new Error("La grabación es muy larga. Graba por partes más cortas.");
+  /** Manda un segmento a transcribir; reintenta una vez ante fallos de red. */
+  const transcribeSegment = useCallback(
+    async (recorded: Blob, index: number) => {
+      setPending((current) => current + 1);
+      try {
+        const wav = await toWav(recorded);
+        if (wav.size > MAX_UPLOAD_BYTES) {
+          throw new Error("Ese trozo salió demasiado largo.");
+        }
+
+        const send = async () => {
+          const form = new FormData();
+          form.append("audio", wav, "dictado.wav");
+          form.append("lang", langRef.current);
+          const response = await fetch("/api/transcribe", { method: "POST", body: form });
+          const data = (await response.json()) as { text?: string; error?: string };
+          if (!response.ok) {
+            const failure = new Error(data.error ?? "No pudimos transcribir el audio.");
+            // Un 4xx no cambia al repetirlo; un 5xx suele ser pasajero.
+            (failure as Error & { retriable?: boolean }).retriable = response.status >= 500;
+            throw failure;
+          }
+          return data.text?.trim() ?? "";
+        };
+
+        let text: string;
+        try {
+          text = await send();
+        } catch (failure) {
+          const retriable =
+            failure instanceof TypeError ||
+            (failure as Error & { retriable?: boolean }).retriable === true;
+          if (!retriable) throw failure;
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          text = await send();
+        }
+
+        emit(index, text);
+      } catch (error) {
+        console.error("[paula] transcripción fallida:", error);
+        // Se libera el turno para que los siguientes segmentos no se queden esperando.
+        emit(index, "");
+        onErrorRef.current(
+          error instanceof Error && error.message
+            ? error.message
+            : "No pudimos transcribir el audio.",
+        );
+      } finally {
+        setPending((current) => Math.max(0, current - 1));
+      }
+    },
+    [emit],
+  );
+
+  /** Arranca un grabador nuevo sobre el microfono ya abierto. */
+  const startSegment = useCallback(() => {
+    const stream = streamRef.current;
+    if (!stream) return;
+
+    const recorder = new MediaRecorder(stream, { mimeType: mimeTypeRef.current });
+    recorderRef.current = recorder;
+    chunksRef.current = [];
+    segmentStartRef.current = Date.now();
+    silenceSinceRef.current = null;
+    peakRef.current = 0;
+
+    const index = nextIndexRef.current;
+    nextIndexRef.current += 1;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      const recorded = new Blob(chunksRef.current, { type: mimeTypeRef.current });
+      chunksRef.current = [];
+
+      const hadVoice = peakRef.current >= 0.035;
+
+      // Trozos mudos o demasiado cortos no se envian: ante el silencio los
+      // modelos tienden a inventar texto, y aqui no se inventa nada.
+      if (cancelledRef.current || recorded.size < 1200 || !hadVoice) {
+        emit(index, "");
+      } else {
+        void transcribeSegment(recorded, index);
       }
 
-      const form = new FormData();
-      form.append("audio", wav, "dictado.wav");
-      form.append("lang", langRef.current);
+      if (listeningRef.current) startSegment();
+    };
 
-      const response = await fetch("/api/transcribe", { method: "POST", body: form });
-      const data = (await response.json()) as { text?: string; error?: string };
-      if (!response.ok) throw new Error(data.error ?? "No pudimos transcribir el audio.");
+    recorder.onerror = (event) => {
+      console.error("[paula] error de grabación:", event);
+      emit(index, "");
+    };
 
-      const text = data.text?.trim();
-      if (text) onTextRef.current(text);
-      else onErrorRef.current("No escuchamos nada en la grabación.");
-    } catch (error) {
-      console.error("[paula] transcripción fallida:", error);
-      onErrorRef.current(
-        error instanceof Error && error.message
-          ? error.message
-          : "No pudimos transcribir el audio.",
-      );
-    } finally {
-      setState("idle");
-      setSeconds(0);
-    }
+    recorder.start(250);
+  }, [emit, transcribeSegment]);
+
+  /** Cierra el segmento actual; el siguiente arranca solo. */
+  const rotate = useCallback(() => {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
   }, []);
 
   const start = useCallback(async () => {
@@ -124,6 +226,7 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
       onErrorRef.current("Tu navegador no permite grabar audio.");
       return;
     }
+    mimeTypeRef.current = mimeType;
 
     let stream: MediaStream;
     try {
@@ -139,52 +242,14 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
     }
 
     cancelledRef.current = false;
-    peakRef.current = 0;
+    listeningRef.current = true;
     streamRef.current = stream;
-    chunksRef.current = [];
+    peakRef.current = 0;
+    nextIndexRef.current = 0;
+    writeIndexRef.current = 0;
+    bufferRef.current.clear();
 
-    const recorder = new MediaRecorder(stream, { mimeType });
-    recorderRef.current = recorder;
-
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
-    };
-
-    recorder.onstop = () => {
-      const recorded = new Blob(chunksRef.current, { type: mimeType });
-      release();
-      if (cancelledRef.current) {
-        setState("idle");
-        setSeconds(0);
-        return;
-      }
-      if (recorded.size < 1200) {
-        setState("idle");
-        setSeconds(0);
-        onErrorRef.current("La grabación fue muy corta. Habla un poco más antes de parar.");
-        return;
-      }
-      // Sin volumen no hay voz: no gastamos una peticion ni arriesgamos
-      // que la IA "rellene" el silencio con texto inventado.
-      if (peakRef.current < 0.035) {
-        setState("idle");
-        setSeconds(0);
-        onErrorRef.current(
-          "No detectamos tu voz. Revisa el micrófono y acércate un poco más.",
-        );
-        return;
-      }
-      void transcribe(recorded);
-    };
-
-    recorder.onerror = (event) => {
-      console.error("[paula] error de grabación:", event);
-      release();
-      setState("idle");
-      onErrorRef.current("Se interrumpió la grabación.");
-    };
-
-    // Medidor de volumen, para que se vea que el micrófono está entrando.
+    // Medidor de volumen: alimenta el indicador y el corte por silencio.
     try {
       const AudioContextClass =
         window.AudioContext ??
@@ -203,6 +268,26 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
           for (const value of data) peak = Math.max(peak, Math.abs(value - 128) / 128);
           peakRef.current = Math.max(peakRef.current, peak);
           setLevel(peak);
+
+          const now = Date.now();
+          const elapsed = now - segmentStartRef.current;
+
+          if (peak < 0.02) {
+            if (silenceSinceRef.current === null) silenceSinceRef.current = now;
+          } else {
+            silenceSinceRef.current = null;
+          }
+
+          const quietFor = silenceSinceRef.current ? now - silenceSinceRef.current : 0;
+          const longEnough = elapsed > MIN_SEGMENT_SECONDS * 1000;
+          const tooLong = elapsed > SEGMENT_MAX_SECONDS * 1000;
+
+          // Se corta en la pausa (nunca en mitad de una palabra) o, si alguien
+          // habla sin parar, al llegar al maximo del segmento.
+          if (listeningRef.current && ((longEnough && quietFor > SILENCE_SPLIT_MS) || tooLong)) {
+            rotate();
+          }
+
           frameRef.current = requestAnimationFrame(tick);
         };
         tick();
@@ -211,22 +296,20 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
       console.error("[paula] medidor de audio no disponible:", error);
     }
 
-    recorder.start(250);
+    startSegment();
     setState("recording");
     setSeconds(0);
-    timerRef.current = window.setInterval(() => {
-      setSeconds((current) => {
-        const next = current + 1;
-        // Tope de seguridad: cerramos la grabación sola.
-        if (next >= MAX_RECORDING_SECONDS) recorderRef.current?.stop();
-        return next;
-      });
-    }, 1000);
-  }, [release, state, transcribe]);
+    timerRef.current = window.setInterval(() => setSeconds((value) => value + 1), 1000);
+  }, [rotate, startSegment, state]);
 
   const stop = useCallback(() => {
+    if (!listeningRef.current) return;
+    listeningRef.current = false;
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-  }, []);
+    release();
+    setState("transcribing");
+    setSeconds(0);
+  }, [release]);
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
@@ -238,14 +321,30 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
     else if (state === "idle") void start();
   }, [start, state, stop]);
 
+  // Cuando no queda nada pendiente, se vuelve al reposo.
+  useEffect(() => {
+    if (state === "transcribing" && pending === 0) setState("idle");
+  }, [pending, state]);
+
   useEffect(
     () => () => {
       cancelledRef.current = true;
+      listeningRef.current = false;
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       release();
     },
     [release],
   );
 
-  return { supported, state, seconds, level, start: () => void start(), stop, cancel, toggle };
+  return {
+    supported,
+    state,
+    seconds,
+    level,
+    pending,
+    start: () => void start(),
+    stop,
+    cancel,
+    toggle,
+  };
 }

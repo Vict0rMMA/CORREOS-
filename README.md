@@ -149,24 +149,32 @@ Elige **Reporte** en *Tipo de texto* y aparece el bloque de fotos:
 
 ## Dictado por voz
 
-Pulsa **Dictar** en el panel izquierdo y habla. Mientras grabas ves el
-cronometro y un medidor que confirma que el microfono esta entrando. Al pulsar
-**Listo**, el audio se transcribe y el texto aparece en el cuadro; **Descartar**
-tira la grabacion sin transcribir.
+Pulsa **Dictar** y habla con naturalidad. El texto va apareciendo **mientras
+sigues hablando**: no hay que parar para ver el resultado. **Listo** cierra el
+dictado y **Descartar** tira lo que quedaba sin transcribir.
 
-- La transcripcion la hace la misma IA, asi que **llega con puntuacion, tildes y
-  mayusculas correctas** (el reconocimiento del navegador no hace eso).
-- Funciona en cualquier navegador con microfono, tambien en movil.
-- El audio se graba, se pasa a WAV mono de 16 kHz y se envia solo al procesarlo;
-  no se guarda en ningun sitio.
-- Maximo **1 minuto y 50 segundos** por grabacion: se corta sola al llegar.
-  El limite viene del tamano maximo de peticion de Vercel (4,5 MB).
-- Si el microfono no capta voz, la aplicacion **no envia el audio** y te avisa:
-  ante el silencio los modelos tienden a inventar frases, y aqui no se inventa nada.
-- La primera vez el navegador pide permiso del microfono. Fuera de `localhost`
-  requiere HTTPS (en Vercel ya lo es).
-- **Consume cuota de la API** (una peticion por grabacion), a diferencia del
-  resto de acciones de texto que tambien la consumen.
+Como funciona por dentro:
+
+- **Sin limite de duracion.** La grabacion se parte sola en segmentos, y el
+  corte se hace **en tus pausas** (un silencio de algo mas de un segundo), de
+  modo que nunca se corta a mitad de una palabra. Si hablas sin parar, corta a
+  los 90 s y sigue grabando sin interrupcion.
+- Cada segmento se transcribe por separado pero el texto se escribe **en
+  orden**, aunque uno tarde mas que otro.
+- Antes de enviar, el audio se pasa a mono de 16 kHz, se recortan los silencios
+  y **se iguala el volumen**. Esto ultimo se nota: con la voz lejos del
+  microfono la transcripcion se comia letras (una placa "AX4471" salia
+  "X4471"), y nivelando el audio vuelve a salir completa.
+- La transcripcion la hace la misma IA, asi que llega con **puntuacion, tildes
+  y mayusculas correctas**, y con los numeros escritos como se escriben en
+  espanol (1.250.000, 15 dias, 9:00).
+- Si un trozo no trae voz, **no se envia**: ante el silencio los modelos
+  tienden a inventar frases, y aqui no se inventa nada.
+- Si falla la red, ese trozo se reintenta solo una vez.
+- Funciona en cualquier navegador con microfono, tambien en movil. La primera
+  vez el navegador pide permiso; fuera de `localhost` requiere HTTPS (en Vercel
+  ya lo es).
+- **Consume cuota de la API**: una peticion por segmento dictado.
 - Puedes dictar la puntuacion en voz alta ("coma", "punto", "nueva linea").
 
 ## Atajos de teclado
