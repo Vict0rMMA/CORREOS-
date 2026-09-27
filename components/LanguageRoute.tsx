@@ -9,7 +9,11 @@ const LANGS = [
   { id: "en" as Lang, label: "English" },
 ];
 
+/** Nombre del idioma como etiqueta (cada uno en su propia lengua). */
 const NAMES: Record<Lang, string> = { es: "Español", en: "English" };
+
+/** Nombre dentro de una frase en español: en minuscula, como manda la RAE. */
+const EN_FRASE: Record<Lang, string> = { es: "español", en: "inglés" };
 
 interface LanguageRouteProps {
   /** Idioma en el que esta escrito el texto. */
@@ -78,8 +82,8 @@ export function LanguageRoute({
 
       <p className="mt-3 border-t border-line pt-2.5 text-xs leading-relaxed text-muted">
         El botón <strong className="font-medium text-ink-soft">Traducir</strong> pasa tu texto
-        de {NAMES[source]} a {NAMES[target]}. Corregir, Mejorar y Generar correo no cambian el
-        idioma: responden en {NAMES[source]}.
+        de {EN_FRASE[source]} a {EN_FRASE[target]}. Corregir, Mejorar y Generar correo no
+        cambian el idioma: responden en {EN_FRASE[source]}.
       </p>
     </div>
   );

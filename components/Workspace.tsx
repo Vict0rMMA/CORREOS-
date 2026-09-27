@@ -481,7 +481,7 @@ export function Workspace() {
               running={running}
               disabled={busy}
               onRun={(action) => void run(action)}
-              translateTarget={targetLang === "es" ? "Español" : "English"}
+              translateTarget={targetLang === "es" ? "español" : "inglés"}
             />
             <p className="text-xs text-muted">
               <kbd className="rounded-md border border-line bg-surface px-1.5 py-0.5 font-sans text-[11px] text-ink-soft">

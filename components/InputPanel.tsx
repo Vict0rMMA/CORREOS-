@@ -91,7 +91,7 @@ export function InputPanel({
         <PanelTitle>Tu texto</PanelTitle>
         {detectedLang ? (
           <span className="animate-fade rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
-            Detectado: {detectedLang === "es" ? "Español" : "Inglés"}
+            Detectado: {detectedLang === "es" ? "español" : "inglés"}
           </span>
         ) : null}
         {mismatchLang ? (
@@ -102,7 +102,7 @@ export function InputPanel({
             className="animate-fade ml-auto inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger transition-colors hover:bg-danger/20"
           >
             <AlertTriangle aria-hidden className="size-3" />
-            Parece {mismatchLang === "es" ? "Español" : "Inglés"} &middot; cambiar
+            Parece {mismatchLang === "es" ? "español" : "inglés"} &middot; cambiar
           </button>
         ) : null}
       </PanelHeader>
