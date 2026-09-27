@@ -80,12 +80,16 @@ export function Workspace() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  /** Falso hasta que se han leido las preferencias guardadas. */
+  const [hydrated, setHydrated] = useState(false);
+
   // ----- carga inicial (localStorage) -----
   useEffect(() => {
     setPrefs(loadPrefs());
     setHistory(loadHistory());
     setText(loadDraft());
     setPasteEnabled(canPaste());
+    setHydrated(true);
   }, []);
 
   // ----- deteccion de idioma -----
@@ -103,8 +107,11 @@ export function Workspace() {
 
   // ----- persistencia -----
   useEffect(() => {
+    // Sin esta guarda, el primer render guardaria los valores por defecto
+    // encima de lo que el usuario tenia guardado, y se perdia todo al recargar.
+    if (!hydrated) return;
     savePrefs({ ...prefs, lang });
-  }, [prefs, lang]);
+  }, [hydrated, prefs, lang]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => saveDraft(text), 400);
@@ -449,6 +456,8 @@ export function Workspace() {
             canGenerateSubject={text.trim().length > 0 && !subjectLoading}
             images={images}
             onImagesChange={setImages}
+            signature={prefs.signature}
+            onSignatureChange={(value) => updatePrefs({ signature: value })}
           />
 
           {/* En movil se ve un panel a la vez: dos cuadros altos obligaban a

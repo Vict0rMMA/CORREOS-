@@ -21,6 +21,8 @@ interface OptionsBarProps {
   canGenerateSubject: boolean;
   images: ReportImage[];
   onImagesChange: (images: ReportImage[]) => void;
+  signature: string;
+  onSignatureChange: (signature: string) => void;
 }
 
 export function OptionsBar({
@@ -37,6 +39,8 @@ export function OptionsBar({
   canGenerateSubject,
   images,
   onImagesChange,
+  signature,
+  onSignatureChange,
 }: OptionsBarProps) {
   const isEmail = textType === "email";
   const isReport = textType === "report";
@@ -88,6 +92,28 @@ export function OptionsBar({
           </div>
         ) : null}
       </div>
+
+      {isEmail ? (
+        <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
+          <label htmlFor="paula-signature" className="eyebrow">
+            Tu firma
+          </label>
+          <textarea
+            id="paula-signature"
+            value={signature}
+            maxLength={200}
+            rows={2}
+            onChange={(event) => onSignatureChange(event.target.value)}
+            placeholder={`Nombre Apellido
+Cargo (opcional)`}
+            className="scroll-slim w-full resize-none rounded-xl border border-line bg-surface px-3 py-2.5 text-sm leading-relaxed text-ink outline-none transition-colors hover:border-line-strong placeholder:text-muted/70"
+          />
+          <p className="text-[11px] leading-relaxed text-muted">
+            Se escribe al final cuando usas <strong className="font-medium text-ink-soft">Generar
+            correo</strong>, después de la despedida. Se guarda: solo hay que ponerla una vez.
+          </p>
+        </div>
+      ) : null}
 
       {isReport ? <ImageAttachments images={images} onChange={onImagesChange} /> : null}
 

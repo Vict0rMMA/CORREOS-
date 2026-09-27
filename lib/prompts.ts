@@ -131,9 +131,15 @@ export function buildUserPrompt(req: ProcessRequest): string {
     );
   }
 
-  if (req.textType === "email" && req.signature?.trim()) {
+  // La firma solo se anade al escribir un correo desde cero. En una correccion
+  // o una traduccion seria anadir algo que el texto original no tenia.
+  if (req.action === "generate_email" && req.signature?.trim()) {
     parts.push(
-      `SIGNATURE: end the email with this closing signature exactly as written: ${req.signature.trim()}`,
+      [
+        "SIGNATURE: end the email with exactly this signature block, on its own lines:",
+        req.signature.trim(),
+        "If that block already starts with a closing line (Atentamente, Cordialmente, Saludos, Best regards...), do not write another one before it.",
+      ].join("\n"),
     );
   }
 

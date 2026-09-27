@@ -132,6 +132,26 @@ Las demas acciones (Corregir, Mejorar, Generar correo) **no cambian el idioma**:
 responden en el idioma en el que escribiste. Si el resultado sale identico a tu
 texto, aparece el aviso *"Sin cambios: tu texto ya estaba bien"*.
 
+## Tu firma en los correos
+
+Con el tipo **Correo** aparece el campo **Tu firma**. Se escribe una sola vez
+(queda guardada en el navegador) y se anade al final **solo cuando usas
+Generar correo**, despues de la despedida:
+
+```
+Atentamente,
+
+Paula Andrea Ochoa
+Administradora
+```
+
+La coma despues de la despedida es lo correcto en espanol: la formula va con
+coma y el nombre en la linea siguiente.
+
+Corregir, Mejorar y Traducir **no** anaden la firma: si tu texto no la tenia,
+el resultado tampoco la lleva. Y si tu firma ya empieza por una despedida
+("Cordialmente,", "Saludos,"), no se escribe otra encima.
+
 ## Reportes con fotos
 
 Elige **Reporte** en *Tipo de texto* y aparece el bloque de fotos:
