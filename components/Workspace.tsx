@@ -71,6 +71,8 @@ export function Workspace() {
   const [route, setRoute] = useState<Route | null>(null);
   /** El modelo devolvio exactamente el mismo texto (no hizo falta cambiar nada). */
   const [unchanged, setUnchanged] = useState(false);
+  /** Texto anterior al ultimo encadenado, para poder deshacerlo. */
+  const [previousText, setPreviousText] = useState<string | null>(null);
   /** En movil solo cabe un panel a la vez: cual se esta viendo. */
   const [mobileView, setMobileView] = useState<"input" | "output">("input");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -220,6 +222,19 @@ export function Workspace() {
         setUnchanged(finalText === source);
         setMobileView("output");
 
+        // Encadenado: el resultado se convierte en el texto de trabajo, para
+        // que la siguiente accion continue sobre el. Sin esto, traducir al
+        // ingles y luego generar el correo devolvia el correo en espanol,
+        // porque se seguia partiendo del texto original.
+        setPreviousText(source);
+        setText(finalText);
+        if (target !== lang) {
+          // Tras traducir, el texto pasa a estar en el idioma de destino y la
+          // ruta se invierte: lo siguiente que se traduzca vuelve al de origen.
+          setLangOverride(target);
+          updatePrefs({ targetLang: lang });
+        }
+
         pushHistory({
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           preview: source.slice(0, 90),
@@ -346,6 +361,7 @@ export function Workspace() {
     setText("");
     setOutput("");
     setRoute(null);
+    setPreviousText(null);
     setLangOverride(null);
     setImages([]);
     setMobileView("input");
@@ -356,6 +372,16 @@ export function Workspace() {
     saveDraft("");
     textareaRef.current?.focus();
   }, []);
+
+  /** Vuelve al texto que habia antes del ultimo encadenado. */
+  const undoChain = useCallback(() => {
+    if (previousText === null) return;
+    setText(previousText);
+    setPreviousText(null);
+    setLangOverride(null);
+    setMobileView("input");
+    textareaRef.current?.focus();
+  }, [previousText]);
 
   const restore = useCallback((item: HistoryItem) => {
     setText(item.input);
@@ -501,6 +527,7 @@ export function Workspace() {
               value={text}
               onChange={(value) => {
                 setText(value);
+                setPreviousText(null);
                 if (status === "empty") setStatus("idle");
               }}
               lang={lang}
@@ -508,6 +535,7 @@ export function Workspace() {
               detectedLang={detectedLang}
               mismatchLang={mismatchLang}
               onClear={clearInput}
+              onUndo={previousText !== null ? undoChain : undefined}
               onPaste={pasteFromClipboard}
               pasteEnabled={pasteEnabled}
               textareaRef={textareaRef}

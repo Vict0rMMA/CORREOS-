@@ -132,6 +132,23 @@ Las demas acciones (Corregir, Mejorar, Generar correo) **no cambian el idioma**:
 responden en el idioma en el que escribiste. Si el resultado sale identico a tu
 texto, aparece el aviso *"Sin cambios: tu texto ya estaba bien"*.
 
+## Las acciones se encadenan
+
+Cada resultado se convierte en el texto de trabajo, asi que las acciones se
+pueden ir aplicando una detras de otra:
+
+```
+texto en espanol -> Traducir a ingles -> Generar correo  ->  correo en ingles
+```
+
+Sin esto, generar el correo despues de traducir volvia a partir del texto
+original y el correo salia en espanol.
+
+Al encadenar, el idioma se ajusta solo: tras traducir al ingles, "Mi texto esta
+en" pasa a English y el boton ofrece traducir de vuelta al espanol. El texto
+anterior no se pierde: esta en **Recientes** y hay un boton **Deshacer** en la
+cabecera del panel para volver atras.
+
 ## Tu firma en los correos
 
 Con el tipo **Correo** aparece el campo **Tu firma**. Se escribe una sola vez

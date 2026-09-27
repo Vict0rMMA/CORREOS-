@@ -1,7 +1,16 @@
 "use client";
 
 import { type ChangeEvent, type DragEvent, type RefObject, useCallback, useState } from "react";
-import { AlertTriangle, ClipboardPaste, Eraser, Loader2, Mic, Square, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardPaste,
+  Eraser,
+  Loader2,
+  Mic,
+  Square,
+  Undo2,
+  X,
+} from "lucide-react";
 import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -19,6 +28,8 @@ interface InputPanelProps {
   /** Idioma que detectamos cuando contradice al elegido a mano. */
   mismatchLang: Lang | null;
   onClear: () => void;
+  /** Vuelve al texto anterior al ultimo resultado encadenado. */
+  onUndo?: () => void;
   onPaste: () => void;
   pasteEnabled: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -33,6 +44,7 @@ export function InputPanel({
   detectedLang,
   mismatchLang,
   onClear,
+  onUndo,
   onPaste,
   pasteEnabled,
   textareaRef,
@@ -95,6 +107,17 @@ export function InputPanel({
           <span className="animate-fade rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
             Detectado: {detectedLang === "es" ? "español" : "inglés"}
           </span>
+        ) : null}
+        {onUndo ? (
+          <button
+            type="button"
+            onClick={onUndo}
+            title="Volver al texto anterior"
+            className="animate-fade ml-auto inline-flex items-center gap-1 rounded-full bg-surface-soft px-2 py-1 text-[11px] font-medium text-muted transition-colors hover:text-ink"
+          >
+            <Undo2 aria-hidden className="size-3" />
+            Deshacer
+          </button>
         ) : null}
         {mismatchLang ? (
           <button
