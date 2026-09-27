@@ -6,6 +6,7 @@ import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel"
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { MAX_INPUT_CHARS } from "@/lib/config";
+import { MAX_RECORDING_SECONDS } from "@/lib/audio";
 import { useDictation } from "@/lib/use-dictation";
 import { cn, countChars, countWords } from "@/lib/utils";
 import type { Lang } from "@/types";
@@ -70,6 +71,9 @@ export function InputPanel({
   const transcribing = dictation.state === "transcribing";
   const minutes = String(Math.floor(dictation.seconds / 60)).padStart(2, "0");
   const secs = String(dictation.seconds % 60).padStart(2, "0");
+  const maxLabel = `${Math.floor(MAX_RECORDING_SECONDS / 60)}:${String(
+    MAX_RECORDING_SECONDS % 60,
+  ).padStart(2, "0")}`;
 
   const handleDrop = async (event: DragEvent<HTMLTextAreaElement>) => {
     setDragging(false);
@@ -144,6 +148,7 @@ export function InputPanel({
               </span>
               <span className="font-mono text-[13px] tabular-nums text-ink-soft">
                 {minutes}:{secs}
+                <span className="text-muted"> / {maxLabel}</span>
               </span>
               {/* Medidor: confirma que el microfono esta entrando */}
               <span aria-hidden className="flex h-5 flex-1 items-center gap-[3px]">

@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MAX_RECORDING_SECONDS, isRecordingSupported, pickRecordingMimeType, toWav } from "@/lib/audio";
+import {
+  MAX_RECORDING_SECONDS,
+  MAX_UPLOAD_BYTES,
+  isRecordingSupported,
+  pickRecordingMimeType,
+  toWav,
+} from "@/lib/audio";
 import type { Lang } from "@/types";
 
 /**
@@ -48,6 +54,8 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
+  /** Volumen maximo captado: si nunca sube, el microfono no oyo nada. */
+  const peakRef = useRef(0);
 
   const onTextRef = useRef(onText);
   const onErrorRef = useRef(onError);
@@ -80,6 +88,10 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
     setState("transcribing");
     try {
       const wav = await toWav(recorded);
+      if (wav.size > MAX_UPLOAD_BYTES) {
+        throw new Error("La grabación es muy larga. Graba por partes más cortas.");
+      }
+
       const form = new FormData();
       form.append("audio", wav, "dictado.wav");
       form.append("lang", langRef.current);
@@ -127,6 +139,7 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
     }
 
     cancelledRef.current = false;
+    peakRef.current = 0;
     streamRef.current = stream;
     chunksRef.current = [];
 
@@ -148,7 +161,17 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
       if (recorded.size < 1200) {
         setState("idle");
         setSeconds(0);
-        onErrorRef.current("La grabación fue muy corta. Mantén pulsado y habla un poco más.");
+        onErrorRef.current("La grabación fue muy corta. Habla un poco más antes de parar.");
+        return;
+      }
+      // Sin volumen no hay voz: no gastamos una peticion ni arriesgamos
+      // que la IA "rellene" el silencio con texto inventado.
+      if (peakRef.current < 0.035) {
+        setState("idle");
+        setSeconds(0);
+        onErrorRef.current(
+          "No detectamos tu voz. Revisa el micrófono y acércate un poco más.",
+        );
         return;
       }
       void transcribe(recorded);
@@ -178,6 +201,7 @@ export function useDictation({ lang, onText, onError }: DictationOptions): Dicta
           analyser.getByteTimeDomainData(data);
           let peak = 0;
           for (const value of data) peak = Math.max(peak, Math.abs(value - 128) / 128);
+          peakRef.current = Math.max(peakRef.current, peak);
           setLevel(peak);
           frameRef.current = requestAnimationFrame(tick);
         };

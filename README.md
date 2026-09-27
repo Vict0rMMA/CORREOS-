@@ -96,14 +96,24 @@ npm run start
 
 ## 6. Despliegue en Vercel
 
-1. Sube el proyecto a GitHub.
-2. En <https://vercel.com/new> importa el repositorio (Vercel detecta Next.js solo).
-3. En **Settings -> Environment Variables** agrega `AI_API_KEY` con tu clave
-   (y `AI_MODEL` si quieres otro modelo). Marca los entornos Production,
-   Preview y Development.
-4. **Deploy**. No hace falta `vercel.json`.
+1. Entra en <https://vercel.com/new> e importa el repositorio de GitHub.
+   Vercel detecta Next.js solo: no toques el framework, el build ni el output.
+2. Antes de pulsar Deploy, abre **Environment Variables** y agrega:
 
-Cada vez que cambies una variable de entorno hay que volver a desplegar.
+   | Nombre       | Valor                    |
+   | ------------ | ------------------------ |
+   | `AI_API_KEY` | tu clave de Google Gemini |
+
+   (opcional: `AI_MODEL`). Deja marcados Production, Preview y Development.
+3. **Deploy**. No hace falta `vercel.json` ni ninguna otra configuracion.
+
+Notas:
+
+- Si cambias una variable de entorno hay que **volver a desplegar** para que
+  tenga efecto.
+- El microfono y el portapapeles necesitan HTTPS: en Vercel ya viene por defecto.
+- Las tres rutas de API corren en Node con un maximo de 60 s, de sobra para
+  cualquier texto o dictado.
 
 ---
 
@@ -149,7 +159,10 @@ tira la grabacion sin transcribir.
 - Funciona en cualquier navegador con microfono, tambien en movil.
 - El audio se graba, se pasa a WAV mono de 16 kHz y se envia solo al procesarlo;
   no se guarda en ningun sitio.
-- Maximo 3 minutos por grabacion: se corta sola al llegar.
+- Maximo **1 minuto y 50 segundos** por grabacion: se corta sola al llegar.
+  El limite viene del tamano maximo de peticion de Vercel (4,5 MB).
+- Si el microfono no capta voz, la aplicacion **no envia el audio** y te avisa:
+  ante el silencio los modelos tienden a inventar frases, y aqui no se inventa nada.
 - La primera vez el navegador pide permiso del microfono. Fuera de `localhost`
   requiere HTTPS (en Vercel ya lo es).
 - **Consume cuota de la API** (una peticion por grabacion), a diferencia del

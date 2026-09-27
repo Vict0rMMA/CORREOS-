@@ -8,8 +8,17 @@
 
 const TARGET_SAMPLE_RATE = 16000;
 
-/** Duracion maxima de una grabacion, en segundos. */
-export const MAX_RECORDING_SECONDS = 180;
+/**
+ * Duracion maxima de una grabacion, en segundos.
+ *
+ * El limite real lo pone el servidor: Vercel rechaza peticiones de mas de
+ * 4,5 MB. Un WAV mono de 16 kHz ocupa 32 KB por segundo, asi que 110 s son
+ * unos 3,4 MB: entra con margen de sobra.
+ */
+export const MAX_RECORDING_SECONDS = 110;
+
+/** Tamano maximo que aceptamos subir (por debajo del limite de Vercel). */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 /** Formato de grabacion soportado por este navegador. */
 export function pickRecordingMimeType(): string | undefined {
