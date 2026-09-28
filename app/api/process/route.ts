@@ -1,5 +1,5 @@
 import { isAction, isTextType, isTone } from "@/lib/actions";
-import { MAX_INPUT_CHARS, completion, streamCompletion, toErrorResponse } from "@/lib/ai";
+import { MAX_INPUT_CHARS, streamCompletion, toErrorResponse } from "@/lib/ai";
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import {
   SYSTEM_PROMPT,
@@ -48,34 +48,29 @@ function wrongLanguage(text: string, target: Lang): boolean {
   return detection.confident && detection.lang !== target;
 }
 
-function textResponse(text: string): Response {
-  return new Response(text, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-    },
-  });
-}
-
-/** Traduce y comprueba el idioma del resultado. */
+/**
+ * Traduce en streaming, comprobando solo el principio del resultado.
+ *
+ * Si esas primeras lineas no vienen en el idioma pedido, se descarta y se
+ * reintenta con una instruccion mas firme. Antes se esperaba al texto
+ * completo para poder comprobarlo, y en correos largos eso se notaba.
+ */
 async function translate(parsed: ProcessRequest, target: Lang): Promise<Response> {
-  const first = await completion({
+  const stream = await streamCompletion({
     system: SYSTEM_PROMPT,
     user: buildUserPrompt(parsed),
     maxTokens: 8000,
+    verify: (muestra) => !wrongLanguage(muestra, target),
+    retryUser: (rechazada) => buildRetryPrompt(parsed, rechazada),
   });
 
-  if (!wrongLanguage(first, target)) return textResponse(first);
-
-  console.warn(`[paula] la traduccion no salio en ${target}; reintentando`);
-  const second = await completion({
-    system: SYSTEM_PROMPT,
-    user: buildRetryPrompt(parsed, first),
-    maxTokens: 8000,
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
   });
-
-  // Si el segundo intento tampoco acierta, devolvemos el mejor disponible.
-  return textResponse(wrongLanguage(second, target) ? first : second);
 }
 
 export async function POST(request: Request): Promise<Response> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, FileDown, FileText, Mail, Plane, Printer, Type } from "lucide-react";
 import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -62,7 +62,19 @@ export function OutputPanel({
   className,
 }: OutputPanelProps) {
   const [copied, setCopied] = useState<"rich" | "plain" | null>(null);
+  const [tardando, setTardando] = useState(false);
   const loading = status === "loading";
+
+  // El plan gratuito de la IA a veces tarda varios segundos. Mejor decirlo que
+  // dejar a la persona mirando una pantalla que parece colgada.
+  useEffect(() => {
+    if (!loading) {
+      setTardando(false);
+      return;
+    }
+    const aviso = window.setTimeout(() => setTardando(true), 4000);
+    return () => window.clearTimeout(aviso);
+  }, [loading]);
   const hasOutput = output.length > 0;
 
   const copy = async (plain: boolean) => {
@@ -111,6 +123,11 @@ export function OutputPanel({
         ) : loading ? (
           <div className="flex flex-col gap-5">
             <FlightStrip flying />
+            {tardando ? (
+              <p className="animate-fade -mt-2 text-[13px] text-muted">
+                La IA está tardando más de lo normal. Sigue trabajando, espera un momento.
+              </p>
+            ) : null}
             <div className="space-y-2.5" aria-hidden>
               {[92, 78, 96, 64, 86, 40].map((width, index) => (
                 <div

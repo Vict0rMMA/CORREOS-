@@ -161,6 +161,12 @@ anade sola. Para cambiarla hay dos sitios:
 
 ### Firma escaneada
 
+La aplicacion trae una firma de serie: la imagen `public/firma.png` (una foto
+de la firma sobre papel, sin recortar). Al abrirla por primera vez se procesa
+sola y queda guardada en el navegador, asi que aparece en los documentos sin
+tener que hacer nada. Para cambiarla, se reemplaza ese archivo o se usa el
+boton **Subir firma escaneada**.
+
 Con **Subir firma escaneada** se puede poner una foto de la firma a mano. La
 aplicacion recorta la imagen a la zona con tinta y le quita el papel del fondo,
 asi que en el documento se ve el trazo solo, dibujado **sobre la linea**, como
@@ -281,6 +287,24 @@ Una vez instalada, **abre aunque no haya conexion** para consultar lo guardado
 El boton **Correo** del panel de resultado abre la aplicacion de correo con el
 asunto y el texto ya escritos, listo para poner el destinatario y enviar. Si el
 texto es muy largo para el enlace, se copia al portapapeles y se avisa.
+
+## Si va lento
+
+La lentitud no suele venir de la aplicacion sino del **plan gratuito de la
+API**, que estrangula segun la hora: medido con llamadas directas a Google, el
+mismo texto ha tardado 0,5 s por la manana y mas de 40 s por la noche.
+
+Lo que hace la aplicacion para defenderse:
+
+- Llama a `/api/calentar` al abrirse, para que la funcion de Vercel este
+  despierta cuando se pulse un boton.
+- Reintenta sola ante fallos pasajeros y, si el modelo principal sigue sin
+  responder, prueba con `AI_MODEL_FALLBACK`.
+- Avisa en pantalla si la espera pasa de cuatro segundos.
+
+Si hace falta que vaya siempre rapido, la solucion real es activar la
+facturacion de la API en Google AI Studio: con este uso el coste es minimo y
+desaparece el estrangulamiento.
 
 ## Pruebas
 

@@ -8,7 +8,7 @@ import { SALIDA, URL_BASE, abrirNavegador, crearInforme, esperarResultado, leerR
 const informe = crearInforme("Word y PDF");
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { leerDelZip } from "./zip.mjs";
 
 const DIR = path.join(SALIDA, "docs");
 fs.rmSync(DIR, { recursive: true, force: true });
@@ -60,12 +60,13 @@ const pdf = await bajar("PDF", "pdf");
 console.log(`Word ${(fs.statSync(docx).size / 1024).toFixed(0)} KB · PDF ${(fs.statSync(pdf).size / 1024).toFixed(0)} KB`);
 
 // Contenido del Word
-const xml = execSync(`unzip -p "${docx}" word/document.xml`, { encoding: "utf8" });
+const xml = leerDelZip(docx, "word/document.xml").toString("utf8");
 const plano = xml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 informe.comprobar("el Word lleva el nombre una sola vez", (plano.match(/Paula Andrea Ochoa/g) || []).length === 1);
 informe.comprobar("el Word lleva el cargo", /Administradora/.test(plano));
 informe.comprobar("el Word lleva la fecha", /de \d{4}/.test(plano));
-informe.comprobar("el Word numera las páginas", /P.gina/.test(execSync(`unzip -l "${docx}"`, { encoding: "utf8" })) || /footer/.test(execSync(`unzip -l "${docx}"`, { encoding: "utf8" })));
+const pie = leerDelZip(docx, "word/footer1.xml").toString("utf8");
+informe.comprobar("el Word numera las páginas", /PAGE|NUMPAGES/.test(pie));
 
 // Vista del PDF renderizado
 await page.goto(`file:///${pdf.replace(/\\/g, "/")}`);

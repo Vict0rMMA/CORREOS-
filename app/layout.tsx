@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, Inter } from "next/font/google";
 import { AmbientSky } from "@/components/AmbientSky";
+import { Precalentar } from "@/components/Precalentar";
 import { ServiceWorker } from "@/components/ServiceWorker";
 import { ToastProvider } from "@/components/ui/Toast";
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from "@/lib/config";
@@ -55,6 +56,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${display.variable} font-sans antialiased`}>
         <AmbientSky />
         <ServiceWorker />
+        <Precalentar />
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

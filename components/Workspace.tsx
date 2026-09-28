@@ -24,6 +24,7 @@ import {
 } from "@/lib/clipboard";
 import { APP_NAME, APP_TAGLINE, HISTORY_LIMIT, MAX_INPUT_CHARS } from "@/lib/config";
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
+import { cargarFirmaPorDefecto } from "@/lib/firma-por-defecto";
 import { downloadDocx } from "@/lib/export/docx";
 import { downloadPdf } from "@/lib/export/pdf";
 import { resolveTargetLang } from "@/lib/prompts";
@@ -101,7 +102,18 @@ export function Workspace() {
     setPrefs(loadPrefs());
     setHistory(loadHistory());
     setText(loadDraft());
-    setSignatureImage(loadSignatureImage());
+    const guardada = loadSignatureImage();
+    if (guardada) {
+      setSignatureImage(guardada);
+    } else {
+      // Sin firma guardada se usa la que trae la aplicacion, y queda guardada
+      // para no volver a procesarla en cada visita.
+      void cargarFirmaPorDefecto().then((firma) => {
+        if (!firma) return;
+        setSignatureImage(firma);
+        saveSignatureImage(firma);
+      });
+    }
     setPasteEnabled(canPaste());
     setHydrated(true);
   }, []);

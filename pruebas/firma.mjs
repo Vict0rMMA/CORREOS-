@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { listarZip } from "./zip.mjs";
 import {
   SALIDA,
   URL_BASE,
@@ -132,8 +132,12 @@ async function bajar(nombre, extension) {
 const docx = await bajar("Word", "docx");
 const pdf = await bajar("PDF", "pdf");
 
-const contenido = execSync(`unzip -l "${docx}"`, { encoding: "utf8" });
-informe.comprobar("el Word lleva la firma como imagen", /media\/.*\.png/i.test(contenido));
+const dentro = listarZip(docx);
+informe.comprobar(
+  "el Word lleva la firma como imagen",
+  dentro.some((nombre) => /^word\/media\/.*\.png$/i.test(nombre)),
+  dentro.filter((n) => n.includes("media")).join(", "),
+);
 
 const bytes = fs.readFileSync(pdf).toString("latin1");
 informe.comprobar("el PDF lleva la firma como imagen", /\/Subtype\s*\/Image/.test(bytes));

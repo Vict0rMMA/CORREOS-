@@ -13,6 +13,16 @@ import { ApiError, GoogleGenAI } from "@google/genai";
  */
 export const AI_MODEL = process.env.AI_MODEL?.trim() || "gemini-flash-lite-latest";
 
+/**
+ * Modelo de emergencia.
+ *
+ * El plan gratuito estrangula segun la hora: el modelo principal puede
+ * devolver 429 o 503 aunque no se haya agotado nada. Antes de rendirse se
+ * intenta con otro. Se desactiva poniendo AI_MODEL_FALLBACK vacio.
+ */
+export const AI_MODEL_FALLBACK =
+  process.env.AI_MODEL_FALLBACK?.trim() ?? "gemini-flash-latest";
+
 /** Limite de caracteres de entrada aceptado por el servidor. */
 export const MAX_INPUT_CHARS = Number(process.env.AI_MAX_INPUT_CHARS) || 12000;
 
@@ -59,18 +69,34 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Reintenta con espera creciente solo los fallos temporales del proveedor.
  * Se usa antes de enviar el primer fragmento al cliente, nunca a mitad de stream.
  */
-async function withRetry<T>(run: () => Promise<T>, attempts = 3): Promise<T> {
+async function withRetry<T>(
+  run: (model: string) => Promise<T>,
+  attempts = 3,
+): Promise<T> {
   let lastError: unknown;
+
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await run();
+      return await run(AI_MODEL);
     } catch (error) {
       lastError = error;
-      if (!isTransient(error) || attempt === attempts - 1) throw error;
+      if (!isTransient(error)) throw error;
+      if (attempt === attempts - 1) break;
       console.warn(`[paula] reintento ${attempt + 1} tras fallo temporal de la IA`);
       await sleep(700 * 2 ** attempt);
     }
   }
+
+  // Ultimo recurso: el mismo trabajo con otro modelo.
+  if (AI_MODEL_FALLBACK && AI_MODEL_FALLBACK !== AI_MODEL) {
+    console.warn(`[paula] probando con el modelo de emergencia ${AI_MODEL_FALLBACK}`);
+    try {
+      return await run(AI_MODEL_FALLBACK);
+    } catch (error) {
+      console.error("[paula] el modelo de emergencia tampoco respondio:", error);
+    }
+  }
+
   throw lastError;
 }
 
@@ -78,7 +104,17 @@ export interface CompletionOptions {
   system: string;
   user: string;
   maxTokens?: number;
+  /**
+   * Comprueba el principio de la respuesta antes de darla por buena.
+   * Devuelve false para rechazarla.
+   */
+  verify?: (muestra: string) => boolean;
+  /** Prompt del segundo intento cuando la verificacion falla. */
+  retryUser?: (rechazada: string) => string;
 }
+
+/** Cuanto texto se mira antes de decidir si la respuesta sirve. */
+const VERIFY_SAMPLE = 160;
 
 /**
  * Devuelve un ReadableStream de texto plano (UTF-8) con la respuesta del modelo.
@@ -91,12 +127,14 @@ export async function streamCompletion({
   system,
   user,
   maxTokens = 8000,
+  verify,
+  retryUser,
 }: CompletionOptions): Promise<ReadableStream<Uint8Array>> {
   /** Abre el stream y devuelve el primer fragmento con texto. */
-  const start = async () => {
+  const start = async (model: string, prompt: string = user) => {
     const chunks = await getClient().models.generateContentStream({
-      model: AI_MODEL,
-      contents: user,
+      model,
+      contents: prompt,
       config: {
         systemInstruction: system,
         temperature: TEMPERATURE,
@@ -130,7 +168,27 @@ export async function streamCompletion({
     return { first, readText };
   };
 
-  const { first: opening, readText } = await withRetry(start);
+  let { first: opening, readText } = await withRetry((model) => start(model));
+
+  // Verificacion sobre las primeras lineas, no sobre el texto entero: asi la
+  // respuesta empieza a llegar enseguida en vez de esperar a que termine.
+  if (verify && retryUser) {
+    let muestra = opening;
+    while (muestra.length < VERIFY_SAMPLE) {
+      const siguiente = await readText();
+      if (siguiente === null) break;
+      muestra += siguiente;
+    }
+
+    if (!verify(muestra)) {
+      console.warn("[paula] respuesta rechazada por la verificacion; reintentando");
+      const segundo = await withRetry((model) => start(model, retryUser(muestra)));
+      opening = segundo.first;
+      readText = segundo.readText;
+    } else {
+      opening = muestra;
+    }
+  }
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -156,9 +214,9 @@ export async function completion({
   user,
   maxTokens = 1000,
 }: CompletionOptions): Promise<string> {
-  const response = await withRetry(() =>
+  const response = await withRetry((model) =>
     getClient().models.generateContent({
-      model: AI_MODEL,
+      model,
       contents: user,
       config: {
         systemInstruction: system,
@@ -199,9 +257,9 @@ export async function transcribe({
   mimeType,
   language,
 }: TranscriptionOptions): Promise<string> {
-  const response = await withRetry(() =>
+  const response = await withRetry((model) =>
     getClient().models.generateContent({
-      model: AI_MODEL,
+      model,
       contents: [
         {
           role: "user",
