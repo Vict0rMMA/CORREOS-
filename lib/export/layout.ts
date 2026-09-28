@@ -1,5 +1,3 @@
-import { APP_NAME } from "@/lib/config";
-
 /**
  * Reglas de maquetacion compartidas por el Word, el PDF y la impresion, para
  * que los tres documentos salgan iguales.
@@ -36,9 +34,12 @@ export function longDate(date = new Date()): string {
   });
 }
 
-/** Pie de pagina comun. */
+/**
+ * Pie de pagina comun: solo la fecha.
+ * Son documentos formales, no llevan la marca de la aplicacion.
+ */
 export function documentFooter(): string {
-  return `${APP_NAME} · ${longDate()}`;
+  return longDate();
 }
 
 /**

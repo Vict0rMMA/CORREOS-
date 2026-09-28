@@ -1,4 +1,3 @@
-import { APP_NAME } from "@/lib/config";
 import { documentFooter, longDate, parseSignature, splitClosing } from "@/lib/export/layout";
 import { fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
@@ -204,6 +203,6 @@ export async function downloadPdf({
     doc.setTextColor(0);
   }
 
-  doc.setProperties({ title: subject || title, creator: APP_NAME });
+  doc.setProperties({ title: subject || title, creator: firma?.name ?? "" });
   downloadBlob(doc.output("blob"), `${slugify(subject || title)}.pdf`);
 }

@@ -1,4 +1,3 @@
-import { APP_NAME } from "@/lib/config";
 import { longDate, parseSignature, splitClosing } from "@/lib/export/layout";
 import type { ReportImage } from "@/types";
 
@@ -58,7 +57,6 @@ export function PrintSheet({
         </div>
       ) : null}
 
-      <p className="print-footer">{APP_NAME}</p>
     </div>
   );
 }

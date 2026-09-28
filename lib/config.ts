@@ -29,5 +29,4 @@ export const STORAGE_KEYS = {
   prefs: "paula:prefs",
   history: "paula:history",
   draft: "paula:draft",
-  theme: "paula:theme",
 } as const;

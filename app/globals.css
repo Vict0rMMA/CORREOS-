@@ -1,36 +1,12 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 /* ---------------------------------------------------------------
-   Paleta de aviacion: cielo de dia arriba, vuelo nocturno en oscuro.
-   Un unico acento azul, mucho aire, contraste alto.
+   Paleta de aviacion: vuelo nocturno.
+   La aplicacion es siempre oscura; aqui se cambian todos los colores.
    --------------------------------------------------------------- */
 :root {
-  --canvas: #f3f6fb;
-  --surface: #ffffff;
-  --surface-glass: rgb(255 255 255 / 0.86);
-  --surface-soft: #f7fafd;
-  --line: #e3e9f2;
-  --line-strong: #c9d4e3;
-  --ink: #0e1a2b;
-  --ink-soft: #33465f;
-  --muted: #6c7e95;
-  --accent: #0a63d2;
-  --accent-soft: #e7f0fe;
-  --accent-ink: #ffffff;
-  --accent-glow: rgb(10 99 210 / 0.45);
-  --sky-glow: rgb(10 99 210 / 0.10);
-  --sky-glow-2: rgb(94 164 255 / 0.10);
-  --sky-dot: rgb(14 26 43 / 0.07);
-  --cloud: rgb(255 255 255 / 0.55);
-  --success: #0f7a52;
-  --danger: #b3261e;
-  --shadow-panel: 0 1px 1px rgb(14 26 43 / 0.03), 0 2px 6px -2px rgb(14 26 43 / 0.06),
-    0 12px 28px -14px rgb(14 26 43 / 0.16);
-}
+  color-scheme: dark;
 
-.dark {
   --canvas: #070b12;
   --surface: #0f1622;
   --surface-glass: rgb(15 22 34 / 0.84);

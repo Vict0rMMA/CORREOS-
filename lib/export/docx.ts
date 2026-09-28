@@ -1,4 +1,3 @@
-import { APP_NAME } from "@/lib/config";
 import { documentFooter, longDate, parseSignature, splitClosing } from "@/lib/export/layout";
 import { dataUrlToBytes, fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
@@ -196,9 +195,10 @@ export async function downloadDocx({
   }
 
   const doc = new Document({
-    creator: APP_NAME,
+    // Los datos del archivo llevan a quien firma, no a la aplicacion.
+    creator: firma?.name ?? "",
     title: subject || title,
-    description: `Generado con ${APP_NAME}`,
+    description: "",
     styles: {
       default: {
         document: { run: { font: "Calibri", size: 24 } },

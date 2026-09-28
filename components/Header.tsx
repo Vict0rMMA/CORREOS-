@@ -2,7 +2,6 @@
 
 import { Plane, Settings } from "lucide-react";
 import { FlightPath, Logo } from "@/components/Logo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
 
 export function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -24,7 +23,6 @@ export function Header({ onOpenSettings }: { onOpenSettings: () => void }) {
         </span>
 
         <div className="ml-auto flex items-center gap-2">
-          <ThemeToggle />
           <button
             type="button"
             onClick={onOpenSettings}

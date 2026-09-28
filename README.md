@@ -13,7 +13,7 @@ descargar en Word o PDF, o imprimir.
 - Seis tonos y siete tipos de texto.
 - Sugerencia de asuntos para correos.
 - Acciones rapidas de un clic, historial local y atajos de teclado.
-- Tema claro / oscuro, disenado para movil, tablet y escritorio.
+- Interfaz oscura, disenada para movil, tablet y escritorio.
 
 Stack: **Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Google Gemini**.
 Sin base de datos: las preferencias, el borrador y el historial viven en el navegador.
@@ -188,7 +188,8 @@ El Word, el PDF y la impresion usan el mismo formato de documento formal:
 - **Cuerpo** del texto.
 - **Bloque de firma**: la despedida, un espacio en blanco para firmar a mano,
   una linea, el nombre en negrita y el cargo debajo en gris.
-- **Pie de pagina** con el nombre de la aplicacion, la fecha y "Pagina X de Y".
+- **Pie de pagina** con la fecha y "Pagina X de Y". Los documentos no llevan
+  ninguna marca de la aplicacion, y el autor del archivo es quien firma.
 - **Anexo fotografico** al final cuando el tipo es Reporte.
 
 Si el texto ya termina con la firma (un correo generado), no se repite: se
@@ -263,6 +264,11 @@ la fecha.
 | `Ctrl / Cmd + Enter`    | Procesar el texto                   |
 | `Ctrl / Cmd + Shift + C`| Copiar el resultado                 |
 | `Esc`                   | Cerrar la ventana o cancelar        |
+
+## Cambiar los colores
+
+La aplicacion es siempre oscura. Todos los colores estan en el bloque `:root`
+de `app/globals.css`: cambiando esas variables cambia la interfaz entera.
 
 ## Estructura del proyecto
 
