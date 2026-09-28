@@ -179,6 +179,21 @@ La coma despues de la despedida es lo correcto en espanol: la formula va con
 coma y el nombre en la linea siguiente. Y si la firma ya empieza por una
 despedida ("Cordialmente,", "Saludos,"), no se escribe otra encima.
 
+## Como salen los documentos
+
+El Word, el PDF y la impresion usan el mismo formato de documento formal:
+
+- **Encabezado** con el tipo de documento en mayusculas y la fecha a la
+  derecha, separados del cuerpo por una linea.
+- **Cuerpo** del texto.
+- **Bloque de firma**: la despedida, un espacio en blanco para firmar a mano,
+  una linea, el nombre en negrita y el cargo debajo en gris.
+- **Pie de pagina** con el nombre de la aplicacion, la fecha y "Pagina X de Y".
+- **Anexo fotografico** al final cuando el tipo es Reporte.
+
+Si el texto ya termina con la firma (un correo generado), no se repite: se
+reconoce, se retira del cuerpo y se vuelve a escribir con formato.
+
 ## Reportes con fotos
 
 Elige **Reporte** en *Tipo de texto* y aparece el bloque de fotos:
@@ -223,6 +238,23 @@ Como funciona por dentro:
   ya lo es).
 - **Consume cuota de la API**: una peticion por segmento dictado.
 - Puedes dictar la puntuacion en voz alta ("coma", "punto", "nueva linea").
+
+## Guardados y buscador
+
+Todo lo que se procesa queda guardado en el navegador, hasta 400 textos. Cada
+uno guarda lo que se escribio, el resultado, el asunto, la accion, el idioma y
+la fecha.
+
+- **Buscador**: filtra por cualquier palabra del texto, del resultado o del
+  asunto. No hace falta poner tildes ("vibracion" encuentra "vibración").
+- Se muestran los 8 mas recientes y **Ver mas** va ampliando.
+- Al pulsar uno se recupera en el editor; la **X** de la derecha borra solo
+  ese, y **Borrar todo** vacia la lista.
+- Si el navegador se quedara sin espacio, se van soltando los mas antiguos en
+  vez de dejar de guardar.
+
+> Se guarda **en ese navegador**, no en una cuenta: desde otro equipo o
+> telefono no se ven los mismos textos. Para eso haria falta una base de datos.
 
 ## Atajos de teclado
 

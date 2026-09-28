@@ -17,8 +17,12 @@ export const DEFAULT_SIGNATURE = "Paula Andrea Ochoa";
 /** Limite de caracteres aceptado por el cliente (el servidor valida de nuevo). */
 export const MAX_INPUT_CHARS = 12000;
 
-/** Cuantos elementos guarda el historial local. */
-export const HISTORY_LIMIT = 20;
+/**
+ * Cuantos textos guarda el historial.
+ * Es todo lo que cabe comodamente en el navegador: si se llenara, se van
+ * soltando los mas antiguos (ver saveHistory).
+ */
+export const HISTORY_LIMIT = 400;
 
 /** Claves de localStorage. */
 export const STORAGE_KEYS = {

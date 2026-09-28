@@ -131,11 +131,8 @@ export function Workspace() {
 
   const pushHistory = useCallback(
     (item: HistoryItem) => {
-      setHistory((current) => {
-        const next = [item, ...current].slice(0, HISTORY_LIMIT);
-        saveHistory(next);
-        return next;
-      });
+      // saveHistory devuelve lo que de verdad cupo en el navegador.
+      setHistory((current) => saveHistory([item, ...current].slice(0, HISTORY_LIMIT)));
     },
     [],
   );
@@ -396,6 +393,10 @@ export function Workspace() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
+  const removeHistoryItem = useCallback((id: string) => {
+    setHistory((current) => saveHistory(current.filter((item) => item.id !== id)));
+  }, []);
+
   const removeHistory = useCallback(() => {
     clearStoredHistory();
     setHistory([]);
@@ -583,7 +584,12 @@ export function Workspace() {
             onRun={(action) => void run(action)}
           />
 
-          <HistoryList items={history} onRestore={restore} onClear={removeHistory} />
+          <HistoryList
+            items={history}
+            onRestore={restore}
+            onRemove={removeHistoryItem}
+            onClear={removeHistory}
+          />
         </div>
 
         <footer className="mt-12 flex items-center justify-center gap-3 text-xs text-muted">

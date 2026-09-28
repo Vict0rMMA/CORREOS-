@@ -90,8 +90,22 @@ export function loadHistory(): HistoryItem[] {
     }));
 }
 
-export function saveHistory(items: HistoryItem[]): void {
-  write(STORAGE_KEYS.history, items.slice(0, HISTORY_LIMIT));
+export function saveHistory(items: HistoryItem[]): HistoryItem[] {
+  if (typeof window === "undefined") return items;
+
+  let lista = items.slice(0, HISTORY_LIMIT);
+  // Si el navegador se queda sin espacio, se sueltan los mas antiguos hasta
+  // que quepa: es preferible perder lo viejo a no guardar lo nuevo.
+  for (let intento = 0; intento < 8; intento += 1) {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(lista));
+      return lista;
+    } catch {
+      if (lista.length <= 1) return lista;
+      lista = lista.slice(0, Math.floor(lista.length / 2));
+    }
+  }
+  return lista;
 }
 
 export function clearHistory(): void {

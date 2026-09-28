@@ -416,6 +416,57 @@
     margin: 0 0 4pt;
   }
 
+  .print-sheet .print-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12pt;
+    border-bottom: 1px solid #b9c4d2;
+    padding-bottom: 6pt;
+    margin-bottom: 16pt;
+  }
+
+  .print-sheet .print-head h1 {
+    margin: 0;
+    font-size: 14pt;
+    letter-spacing: 0.06em;
+  }
+
+  .print-sheet .print-head span {
+    font-size: 9pt;
+    color: #667;
+    white-space: nowrap;
+  }
+
+  /* Bloque de firma: despedida, linea para firmar, nombre y cargo */
+  .print-sheet .print-sign {
+    margin-top: 28pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-sheet .print-closing {
+    margin: 0 0 42pt;
+  }
+
+  .print-sheet .print-rule {
+    display: block;
+    width: 7cm;
+    border-top: 1px solid #8b97a8;
+    margin-bottom: 5pt;
+  }
+
+  .print-sheet .print-name {
+    margin: 0;
+    font-weight: 700;
+  }
+
+  .print-sheet .print-role {
+    margin: 1pt 0 0;
+    font-size: 9pt;
+    color: #667;
+  }
+
   .print-sheet .print-subject {
     font-size: 11pt;
     margin: 0 0 12pt;

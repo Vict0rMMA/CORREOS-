@@ -1,5 +1,5 @@
 import { APP_NAME } from "@/lib/config";
-import { withSignature } from "@/lib/utils";
+import { longDate, parseSignature, splitClosing } from "@/lib/export/layout";
 import type { ReportImage } from "@/types";
 
 /** Solo visible al imprimir: hoja limpia con titulo, asunto, contenido y fotos. */
@@ -16,11 +16,32 @@ export function PrintSheet({
   images?: ReportImage[];
   signature?: string;
 }) {
+  const firma = parseSignature(signature);
+  const { body: cuerpo, closing } = firma
+    ? splitClosing(body, firma.name)
+    : { body, closing: null };
+
   return (
     <div className="print-sheet hidden" aria-hidden>
-      <h1>{title}</h1>
+      <div className="print-head">
+        <h1>{title.toUpperCase()}</h1>
+        <span>{longDate()}</span>
+      </div>
       {subject ? <p className="print-subject">Asunto: {subject}</p> : null}
-      <div style={{ whiteSpace: "pre-wrap" }}>{withSignature(body, signature)}</div>
+      <div style={{ whiteSpace: "pre-wrap" }}>{cuerpo}</div>
+
+      {firma ? (
+        <div className="print-sign">
+          {closing ? <p className="print-closing">{closing}</p> : null}
+          <span className="print-rule" />
+          <p className="print-name">{firma.name}</p>
+          {firma.details.map((detail) => (
+            <p key={detail} className="print-role">
+              {detail}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {images && images.length > 0 ? (
         <div className="print-annex">
