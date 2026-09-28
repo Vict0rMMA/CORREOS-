@@ -14,6 +14,7 @@ descargar en Word o PDF, o imprimir.
 - Sugerencia de asuntos para correos.
 - Acciones rapidas de un clic, historial local y atajos de teclado.
 - Interfaz oscura, disenada para movil, tablet y escritorio.
+- Se instala en el telefono como una aplicacion mas.
 
 Stack: **Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Google Gemini**.
 Sin base de datos: las preferencias, el borrador y el historial viven en el navegador.
@@ -158,6 +159,16 @@ anade sola. Para cambiarla hay dos sitios:
   Lo que se escriba ahi queda guardado en el navegador.
 - `DEFAULT_SIGNATURE` en `lib/config.ts`, que es el valor de partida.
 
+### Firma escaneada
+
+Con **Subir firma escaneada** se puede poner una foto de la firma a mano. La
+aplicacion recorta la imagen a la zona con tinta y le quita el papel del fondo,
+asi que en el documento se ve el trazo solo, dibujado **sobre la linea**, como
+en un documento firmado de verdad.
+
+Sirve una foto del movil: no hace falta escaner ni fondo blanco perfecto.
+Se guarda en el navegador y se puede cambiar o quitar cuando se quiera.
+
 Donde aparece:
 
 - En los correos de **Generar correo**, despues de la despedida.
@@ -256,6 +267,36 @@ la fecha.
 
 > Se guarda **en ese navegador**, no en una cuenta: desde otro equipo o
 > telefono no se ven los mismos textos. Para eso haria falta una base de datos.
+
+## Instalarla en el telefono
+
+En el navegador del movil, menu -> **Anadir a pantalla de inicio**. Queda con
+su icono y se abre a pantalla completa, sin barra de direcciones.
+
+Una vez instalada, **abre aunque no haya conexion** para consultar lo guardado
+(procesar texto si necesita internet).
+
+## Abrir en el correo
+
+El boton **Correo** del panel de resultado abre la aplicacion de correo con el
+asunto y el texto ya escritos, listo para poner el destinatario y enviar. Si el
+texto es muy largo para el enlace, se copia al portapapeles y se avisa.
+
+## Pruebas
+
+```bash
+npm run dev        # en una terminal
+npm test           # en otra: pruebas que no gastan cuota de la IA
+npm run test:todo  # todas, incluidas las que llaman a la IA
+```
+
+Las pruebas manejan un Chrome de verdad contra la aplicacion: escriben, tocan
+botones, descargan el Word y el PDF y miran lo que sale. Cubren la interfaz en
+cinco tamanos, el celular, los tipos de texto, la traduccion, el encadenado,
+los documentos, la firma escaneada, el buscador y el dictado.
+
+Si Chrome no esta en la ruta habitual se indica con `PAULA_CHROME`, y para
+probar contra otra direccion, con `PAULA_URL`.
 
 ## Atajos de teclado
 

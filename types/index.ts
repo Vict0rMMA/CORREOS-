@@ -10,6 +10,14 @@ export type Tone =
 
 export type TextType = "email" | "report" | "message";
 
+/** Firma escaneada, recortada y con el fondo quitado. */
+export interface SignatureDrawing {
+  /** PNG transparente en data URL. */
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 /** Foto adjunta a un reporte, ya normalizada a JPEG. */
 export interface ReportImage {
   id: string;

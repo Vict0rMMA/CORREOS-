@@ -60,3 +60,27 @@ export function toPlainText(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/**
+ * Longitud maxima razonable de un enlace mailto.
+ *
+ * Windows corta los enlaces alrededor de los 2.000 caracteres y algunos
+ * clientes de correo antes, asi que por encima de esto se copia el texto en
+ * vez de meterlo en el enlace.
+ */
+export const MAX_MAILTO_LENGTH = 1800;
+
+export interface MailtoOptions {
+  subject?: string;
+  body: string;
+}
+
+/** Construye el enlace para abrir el correo ya redactado. */
+export function buildMailto({ subject, body }: MailtoOptions): string {
+  const params = new URLSearchParams();
+  if (subject?.trim()) params.set("subject", subject.trim());
+  if (body.trim()) params.set("body", body.trim());
+  // URLSearchParams usa "+" para los espacios y los clientes de correo
+  // esperan %20, asi que se corrige.
+  return `mailto:?${params.toString().replace(/\+/g, "%20")}`;
+}

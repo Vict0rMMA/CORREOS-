@@ -425,6 +425,22 @@
     margin: 0 0 42pt;
   }
 
+  .print-sheet .print-closing:has(+ .print-signature) {
+    margin-bottom: 4pt;
+  }
+
+  .print-sheet .print-signature {
+    display: block;
+    height: 1.6cm;
+    width: auto;
+    max-width: 7cm;
+    margin-bottom: 1pt;
+  }
+
+  .print-sheet .print-closing + .print-signature {
+    margin-top: 6pt;
+  }
+
   .print-sheet .print-rule {
     display: block;
     width: 7cm;

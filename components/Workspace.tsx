@@ -14,7 +14,14 @@ import { QuickActions } from "@/components/QuickActions";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useToast } from "@/components/ui/Toast";
 import { TEXT_TYPES } from "@/lib/actions";
-import { canPaste, readClipboard, toPlainText, writeClipboard } from "@/lib/clipboard";
+import {
+  MAX_MAILTO_LENGTH,
+  buildMailto,
+  canPaste,
+  readClipboard,
+  toPlainText,
+  writeClipboard,
+} from "@/lib/clipboard";
 import { APP_NAME, APP_TAGLINE, HISTORY_LIMIT, MAX_INPUT_CHARS } from "@/lib/config";
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import { downloadDocx } from "@/lib/export/docx";
@@ -27,9 +34,11 @@ import {
   loadDraft,
   loadHistory,
   loadPrefs,
+  loadSignatureImage,
   saveDraft,
   saveHistory,
   savePrefs,
+  saveSignatureImage,
 } from "@/lib/storage";
 import type {
   Action,
@@ -37,6 +46,7 @@ import type {
   Lang,
   Prefs,
   ReportImage,
+  SignatureDrawing,
   Status,
   SubjectResponse,
   TextType,
@@ -55,6 +65,7 @@ export function Workspace() {
   const [subject, setSubject] = useState("");
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
   const [images, setImages] = useState<ReportImage[]>([]);
+  const [signatureImage, setSignatureImage] = useState<SignatureDrawing | null>(null);
 
   // ----- preferencias -----
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -90,6 +101,7 @@ export function Workspace() {
     setPrefs(loadPrefs());
     setHistory(loadHistory());
     setText(loadDraft());
+    setSignatureImage(loadSignatureImage());
     setPasteEnabled(canPaste());
     setHydrated(true);
   }, []);
@@ -324,6 +336,30 @@ export function Workspace() {
     textareaRef.current?.focus();
   }, [toast]);
 
+  /** Abre el cliente de correo con el asunto y el texto ya escritos. */
+  const openMail = useCallback(async () => {
+    if (!output) return;
+
+    const asunto = prefs.textType === "email" ? subject.trim() : "";
+    const enlace = buildMailto({ subject: asunto, body: output });
+
+    // Los enlaces mailto tienen un limite: si el correo es largo, se copia el
+    // texto y se abre el correo solo con el asunto.
+    if (enlace.length > MAX_MAILTO_LENGTH) {
+      const copiado = await writeClipboard(output);
+      window.location.href = buildMailto({ subject: asunto, body: "" });
+      toast(
+        copiado
+          ? "El texto es largo: lo copiamos, pégalo en el correo"
+          : "El texto es largo para abrirlo así; cópialo y pégalo",
+        "info",
+      );
+      return;
+    }
+
+    window.location.href = enlace;
+  }, [output, prefs.textType, subject, toast]);
+
   // ----- exportar -----
   const exportPayload = useMemo(
     () => ({
@@ -332,8 +368,9 @@ export function Workspace() {
       body: output,
       images: prefs.textType === "report" ? images : undefined,
       signature: prefs.signature,
+      signatureImage,
     }),
-    [images, output, prefs.signature, prefs.textType, subject, typeLabel],
+    [images, output, prefs.signature, prefs.textType, signatureImage, subject, typeLabel],
   );
 
   const handleExport = useCallback(
@@ -486,6 +523,11 @@ export function Workspace() {
             onImagesChange={setImages}
             signature={prefs.signature}
             onSignatureChange={(value) => updatePrefs({ signature: value })}
+            signatureImage={signatureImage}
+            onSignatureImageChange={(imagen) => {
+              setSignatureImage(imagen);
+              saveSignatureImage(imagen);
+            }}
           />
 
           {/* En movil se ve un panel a la vez: dos cuadros altos obligaban a
@@ -554,6 +596,7 @@ export function Workspace() {
               onDownloadDocx={() => void handleExport("docx")}
               onDownloadPdf={() => void handleExport("pdf")}
               onPrint={() => window.print()}
+              onOpenMail={() => void openMail()}
               busyExport={busyExport}
             />
           </div>
@@ -616,6 +659,7 @@ export function Workspace() {
         body={output}
         images={exportPayload.images}
         signature={prefs.signature}
+        signatureImage={signatureImage}
       />
     </>
   );

@@ -29,4 +29,6 @@ export const STORAGE_KEYS = {
   prefs: "paula:prefs",
   history: "paula:history",
   draft: "paula:draft",
+  // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
+  signatureImage: "paula:firma-imagen",
 } as const;

@@ -1,6 +1,6 @@
 import { isTextType, isTone } from "@/lib/actions";
 import { DEFAULT_SIGNATURE, HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
-import type { HistoryItem, Prefs } from "@/types";
+import type { HistoryItem, Prefs, SignatureDrawing } from "@/types";
 
 /**
  * Persistencia local. Todo va envuelto en try/catch porque localStorage
@@ -73,6 +73,20 @@ export function saveDraft(text: string): void {
     window.localStorage.setItem(STORAGE_KEYS.draft, text);
   } catch {
     /* ignorado */
+  }
+}
+
+export function loadSignatureImage(): SignatureDrawing | null {
+  return read<SignatureDrawing>(STORAGE_KEYS.signatureImage);
+}
+
+export function saveSignatureImage(image: SignatureDrawing | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (image) window.localStorage.setItem(STORAGE_KEYS.signatureImage, JSON.stringify(image));
+    else window.localStorage.removeItem(STORAGE_KEYS.signatureImage);
+  } catch (error) {
+    console.error("[paula] no se pudo guardar la firma escaneada:", error);
   }
 }
 

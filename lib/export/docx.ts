@@ -1,7 +1,7 @@
 import { documentFooter, longDate, parseSignature, splitClosing } from "@/lib/export/layout";
 import { dataUrlToBytes, fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
-import type { ReportImage } from "@/types";
+import type { ReportImage, SignatureDrawing } from "@/types";
 
 export interface ExportPayload {
   /** Titulo del documento (p. ej. "Correo" o el tipo de texto). */
@@ -14,11 +14,17 @@ export interface ExportPayload {
   images?: ReportImage[];
   /** Firma que cierra el documento: nombre en la primera linea, cargo debajo. */
   signature?: string;
+  /** Firma escaneada, que se dibuja sobre la linea. */
+  signatureImage?: SignatureDrawing | null;
 }
 
 /** Ancho util de una pagina A4 con margenes de 2 cm, en pixeles a 96 ppp. */
 const CONTENT_WIDTH_PX = 624;
 const MAX_IMAGE_HEIGHT_PX = 460;
+
+/** Tamano maximo de la firma escaneada, en pixeles a 96 ppp. */
+const SIGNATURE_WIDTH_PX = 220;
+const SIGNATURE_HEIGHT_PX = 70;
 
 /** Gris de los textos secundarios. */
 const GREY = "6B7C93";
@@ -34,6 +40,7 @@ export async function downloadDocx({
   body,
   images = [],
   signature = "",
+  signatureImage = null,
 }: ExportPayload): Promise<void> {
   const {
     AlignmentType,
@@ -111,10 +118,29 @@ export async function downloadDocx({
       );
     }
 
-    // Espacio para firmar a mano y la linea sobre la que va el nombre.
+    if (signatureImage) {
+      // Firma escaneada: se dibuja justo encima de la linea.
+      const alto = Math.min(SIGNATURE_HEIGHT_PX, signatureImage.height);
+      const ancho = Math.round((signatureImage.width / signatureImage.height) * alto);
+      children.push(
+        new Paragraph({
+          spacing: { before: closing ? 200 : 360, after: 0 },
+          children: [
+            new ImageRun({
+              type: "png",
+              data: dataUrlToBytes(signatureImage.dataUrl),
+              transformation: { width: Math.min(ancho, SIGNATURE_WIDTH_PX), height: alto },
+              altText: { name: "Firma", title: firma.name, description: `Firma de ${firma.name}` },
+            }),
+          ],
+        }),
+      );
+    }
+
+    // Linea sobre la que va el nombre (y bajo la firma escaneada, si la hay).
     children.push(
       new Paragraph({
-        spacing: { before: closing ? 720 : 900, after: 60 },
+        spacing: { before: signatureImage ? 0 : closing ? 720 : 900, after: 60 },
         border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "8B97A8", space: 2 } },
         children: [new TextRun({ text: "", size: 24 })],
       }),

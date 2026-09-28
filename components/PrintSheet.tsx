@@ -1,5 +1,5 @@
 import { longDate, parseSignature, splitClosing } from "@/lib/export/layout";
-import type { ReportImage } from "@/types";
+import type { ReportImage, SignatureDrawing } from "@/types";
 
 /** Solo visible al imprimir: hoja limpia con titulo, asunto, contenido y fotos. */
 export function PrintSheet({
@@ -8,12 +8,14 @@ export function PrintSheet({
   body,
   images,
   signature = "",
+  signatureImage = null,
 }: {
   title: string;
   subject?: string;
   body: string;
   images?: ReportImage[];
   signature?: string;
+  signatureImage?: SignatureDrawing | null;
 }) {
   const firma = parseSignature(signature);
   const { body: cuerpo, closing } = firma
@@ -32,6 +34,10 @@ export function PrintSheet({
       {firma ? (
         <div className="print-sign">
           {closing ? <p className="print-closing">{closing}</p> : null}
+          {signatureImage ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img className="print-signature" src={signatureImage.dataUrl} alt="" />
+          ) : null}
           <span className="print-rule" />
           <p className="print-name">{firma.name}</p>
           {firma.details.map((detail) => (

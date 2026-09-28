@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, FileDown, FileText, Plane, Printer, Type } from "lucide-react";
+import { Check, Copy, FileDown, FileText, Mail, Plane, Printer, Type } from "lucide-react";
 import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +24,8 @@ interface OutputPanelProps {
   onDownloadDocx: () => void;
   onDownloadPdf: () => void;
   onPrint: () => void;
+  /** Abre el cliente de correo con el texto ya puesto. */
+  onOpenMail: () => void;
   busyExport: "docx" | "pdf" | null;
   className?: string;
 }
@@ -55,6 +57,7 @@ export function OutputPanel({
   onDownloadDocx,
   onDownloadPdf,
   onPrint,
+  onOpenMail,
   busyExport,
   className,
 }: OutputPanelProps) {
@@ -170,6 +173,16 @@ export function OutputPanel({
           Sin formato
         </Button>
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="quiet"
+            onClick={onOpenMail}
+            disabled={!hasOutput}
+            title="Abrir tu correo con este texto ya escrito"
+            icon={<Mail aria-hidden className="size-4" />}
+          >
+            Correo
+          </Button>
           <Button
             size="sm"
             variant="quiet"
