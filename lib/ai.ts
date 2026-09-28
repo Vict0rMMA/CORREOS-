@@ -66,8 +66,8 @@ function isTransient(error: unknown): boolean {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Reintenta con espera creciente solo los fallos temporales del proveedor.
- * Se usa antes de enviar el primer fragmento al cliente, nunca a mitad de stream.
+ * Reintenta con espera creciente solo los fallos temporales del proveedor y,
+ * si el modelo principal sigue sin responder, prueba con el de emergencia.
  */
 async function withRetry<T>(
   run: (model: string) => Promise<T>,

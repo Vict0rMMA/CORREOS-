@@ -16,6 +16,8 @@ export interface SignatureDrawing {
   dataUrl: string;
   width: number;
   height: number;
+  /** true si vino del archivo que trae la aplicacion, no de una subida. */
+  deSerie?: boolean;
 }
 
 /** Foto adjunta a un reporte, ya normalizada a JPEG. */

@@ -12,6 +12,16 @@ import type { SignatureDrawing } from "@/types";
  */
 const RUTA = "/firma.png";
 
+/** true si la aplicacion trae firma de serie. */
+export async function hayFirmaDeSerie(): Promise<boolean> {
+  try {
+    const respuesta = await fetch(RUTA, { method: "HEAD", cache: "no-store" });
+    return respuesta.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function cargarFirmaPorDefecto(): Promise<SignatureDrawing | null> {
   try {
     const respuesta = await fetch(RUTA, { cache: "force-cache" });
@@ -19,7 +29,7 @@ export async function cargarFirmaPorDefecto(): Promise<SignatureDrawing | null> 
 
     const archivo = new File([await respuesta.blob()], "firma.png", { type: "image/png" });
     const { prepareSignatureImage } = await import("@/lib/images");
-    return await prepareSignatureImage(archivo);
+    return { ...(await prepareSignatureImage(archivo)), deSerie: true };
   } catch (error) {
     console.error("[paula] no se pudo cargar la firma de serie:", error);
     return null;

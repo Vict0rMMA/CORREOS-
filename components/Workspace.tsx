@@ -24,7 +24,7 @@ import {
 } from "@/lib/clipboard";
 import { APP_NAME, APP_TAGLINE, HISTORY_LIMIT, MAX_INPUT_CHARS } from "@/lib/config";
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
-import { cargarFirmaPorDefecto } from "@/lib/firma-por-defecto";
+import { cargarFirmaPorDefecto, hayFirmaDeSerie } from "@/lib/firma-por-defecto";
 import { downloadDocx } from "@/lib/export/docx";
 import { downloadPdf } from "@/lib/export/pdf";
 import { resolveTargetLang } from "@/lib/prompts";
@@ -103,7 +103,18 @@ export function Workspace() {
     setHistory(loadHistory());
     setText(loadDraft());
     const guardada = loadSignatureImage();
-    if (guardada) {
+    if (guardada?.deSerie) {
+      // Venia del archivo de la aplicacion: si ese archivo ya no esta, se
+      // retira sola, sin tener que borrarla a mano.
+      void hayFirmaDeSerie().then((existe) => {
+        if (existe) {
+          setSignatureImage(guardada);
+        } else {
+          setSignatureImage(null);
+          saveSignatureImage(null);
+        }
+      });
+    } else if (guardada) {
       setSignatureImage(guardada);
     } else {
       // Sin firma guardada se usa la que trae la aplicacion, y queda guardada
