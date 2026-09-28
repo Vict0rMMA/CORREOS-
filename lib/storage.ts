@@ -76,7 +76,20 @@ export function saveDraft(text: string): void {
   }
 }
 
+/** Claves de firmas de versiones anteriores, que ya no valen. */
+const FIRMAS_ANTIGUAS = ["paula:firma-imagen"];
+
 export function loadSignatureImage(): SignatureDrawing | null {
+  if (typeof window !== "undefined") {
+    // Limpieza: lo guardado con la clave vieja se descarta.
+    for (const clave of FIRMAS_ANTIGUAS) {
+      try {
+        window.localStorage.removeItem(clave);
+      } catch {
+        /* ignorado */
+      }
+    }
+  }
   return read<SignatureDrawing>(STORAGE_KEYS.signatureImage);
 }
 

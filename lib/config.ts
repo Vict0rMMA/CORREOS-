@@ -30,5 +30,7 @@ export const STORAGE_KEYS = {
   history: "paula:history",
   draft: "paula:draft",
   // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
-  signatureImage: "paula:firma-imagen",
+  // El numero sube cuando hay que descartar lo guardado en los navegadores:
+  // asi nadie se queda con una firma que ya no corresponde.
+  signatureImage: "paula:firma-imagen-2",
 } as const;
