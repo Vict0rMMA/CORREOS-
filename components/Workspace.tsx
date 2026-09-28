@@ -334,8 +334,9 @@ export function Workspace() {
       subject: prefs.textType === "email" && subject.trim() ? subject.trim() : undefined,
       body: output,
       images: prefs.textType === "report" ? images : undefined,
+      signature: prefs.signature,
     }),
-    [images, output, prefs.textType, subject, typeLabel],
+    [images, output, prefs.signature, prefs.textType, subject, typeLabel],
   );
 
   const handleExport = useCallback(
@@ -608,6 +609,7 @@ export function Workspace() {
         subject={exportPayload.subject}
         body={output}
         images={exportPayload.images}
+        signature={prefs.signature}
       />
     </>
   );

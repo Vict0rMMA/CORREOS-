@@ -57,3 +57,29 @@ export function downloadBlob(blob: Blob, filename: string): void {
 export function toLines(text: string): string[] {
   return text.replace(/\r\n/g, "\n").split("\n");
 }
+
+/**
+ * Anade la firma al final de un texto, salvo que ya este ahi.
+ *
+ * Los correos generados ya terminan con ella (la pone la IA), asi que antes de
+ * escribirla en el Word, el PDF o la impresion se comprueba si ya aparece.
+ */
+export function withSignature(body: string, signature: string): string {
+  const firma = signature.trim();
+  if (!firma) return body;
+
+  const simple = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // Basta con que el nombre (primera linea de la firma) ya este al final.
+  const nombre = simple(firma.split("\n")[0] ?? "");
+  const cierre = simple(body).slice(-220);
+  if (nombre && cierre.includes(nombre)) return body;
+
+  return `${body.replace(/\s+$/, "")}\n\n${firma}`;
+}

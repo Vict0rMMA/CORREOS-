@@ -1,6 +1,6 @@
 import { APP_NAME } from "@/lib/config";
 import { dataUrlToBytes, fitWidth } from "@/lib/images";
-import { downloadBlob, slugify, toLines } from "@/lib/utils";
+import { downloadBlob, slugify, toLines, withSignature } from "@/lib/utils";
 import type { ReportImage } from "@/types";
 
 export interface ExportPayload {
@@ -12,6 +12,8 @@ export interface ExportPayload {
   body: string;
   /** Fotos del reporte, en orden. */
   images?: ReportImage[];
+  /** Firma que cierra el documento. */
+  signature?: string;
 }
 
 /** Ancho util de una pagina A4 con margenes de 2 cm, en pixeles a 96 ppp. */
@@ -27,8 +29,11 @@ export async function downloadDocx({
   subject,
   body,
   images = [],
+  signature = "",
 }: ExportPayload): Promise<void> {
   const { Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType } = await import("docx");
+
+  const contenido = withSignature(body, signature);
 
   const children = [];
 
@@ -51,7 +56,7 @@ export async function downloadDocx({
     );
   }
 
-  for (const line of toLines(body)) {
+  for (const line of toLines(contenido)) {
     children.push(
       new Paragraph({
         alignment: AlignmentType.LEFT,

@@ -149,11 +149,24 @@ en" pasa a English y el boton ofrece traducir de vuelta al espanol. El texto
 anterior no se pierde: esta en **Recientes** y hay un boton **Deshacer** en la
 cabecera del panel para volver atras.
 
-## Tu firma en los correos
+## Tu firma
 
-Con el tipo **Correo** aparece el campo **Tu firma**. Se escribe una sola vez
-(queda guardada en el navegador) y se anade al final **solo cuando usas
-Generar correo**, despues de la despedida:
+La aplicacion es de una sola persona, asi que la firma **viene puesta** y se
+anade sola. Para cambiarla hay dos sitios:
+
+- El campo **Tu firma**, que aparece junto al asunto cuando el tipo es Correo.
+  Lo que se escriba ahi queda guardado en el navegador.
+- `DEFAULT_SIGNATURE` en `lib/config.ts`, que es el valor de partida.
+
+Donde aparece:
+
+- En los correos de **Generar correo**, despues de la despedida.
+- Al final del **Word**, el **PDF** y la **impresion**, sea cual sea el texto.
+  Si el texto ya termina con ella (un correo generado), no se repite.
+- **No** se anade al resultado en pantalla ni a lo que se copia: ahi queda
+  exactamente lo que devolvio la IA.
+
+Un correo generado queda asi:
 
 ```
 Atentamente,
@@ -163,11 +176,8 @@ Administradora
 ```
 
 La coma despues de la despedida es lo correcto en espanol: la formula va con
-coma y el nombre en la linea siguiente.
-
-Corregir, Mejorar y Traducir **no** anaden la firma: si tu texto no la tenia,
-el resultado tampoco la lleva. Y si tu firma ya empieza por una despedida
-("Cordialmente,", "Saludos,"), no se escribe otra encima.
+coma y el nombre en la linea siguiente. Y si la firma ya empieza por una
+despedida ("Cordialmente,", "Saludos,"), no se escribe otra encima.
 
 ## Reportes con fotos
 

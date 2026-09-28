@@ -1,4 +1,5 @@
 import { APP_NAME } from "@/lib/config";
+import { withSignature } from "@/lib/utils";
 import type { ReportImage } from "@/types";
 
 /** Solo visible al imprimir: hoja limpia con titulo, asunto, contenido y fotos. */
@@ -7,17 +8,19 @@ export function PrintSheet({
   subject,
   body,
   images,
+  signature = "",
 }: {
   title: string;
   subject?: string;
   body: string;
   images?: ReportImage[];
+  signature?: string;
 }) {
   return (
     <div className="print-sheet hidden" aria-hidden>
       <h1>{title}</h1>
       {subject ? <p className="print-subject">Asunto: {subject}</p> : null}
-      <div style={{ whiteSpace: "pre-wrap" }}>{body}</div>
+      <div style={{ whiteSpace: "pre-wrap" }}>{withSignature(body, signature)}</div>
 
       {images && images.length > 0 ? (
         <div className="print-annex">

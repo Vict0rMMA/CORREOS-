@@ -1,5 +1,5 @@
 import { isTextType, isTone } from "@/lib/actions";
-import { HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
+import { DEFAULT_SIGNATURE, HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
 import type { HistoryItem, Prefs } from "@/types";
 
 /**
@@ -12,7 +12,7 @@ export const DEFAULT_PREFS: Prefs = {
   targetLang: "en",
   tone: "professional",
   textType: "email",
-  signature: "",
+  signature: DEFAULT_SIGNATURE,
 };
 
 function read<T>(key: string): T | null {
@@ -46,7 +46,11 @@ export function loadPrefs(): Prefs {
     targetLang: merged.targetLang === "es" ? "es" : "en",
     tone: isTone(merged.tone) ? merged.tone : DEFAULT_PREFS.tone,
     textType: isTextType(merged.textType) ? merged.textType : DEFAULT_PREFS.textType,
-    signature: typeof merged.signature === "string" ? merged.signature : "",
+    // Una firma vacia guardada se entiende como "todavia no la he puesto".
+    signature:
+      typeof merged.signature === "string" && merged.signature.trim()
+        ? merged.signature
+        : DEFAULT_SIGNATURE,
   };
 }
 

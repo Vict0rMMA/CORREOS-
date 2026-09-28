@@ -1,6 +1,6 @@
 import { APP_NAME } from "@/lib/config";
 import { fitWidth } from "@/lib/images";
-import { downloadBlob, slugify, toLines } from "@/lib/utils";
+import { downloadBlob, slugify, toLines, withSignature } from "@/lib/utils";
 import type { ExportPayload } from "@/lib/export/docx";
 
 const MARGIN = 64;
@@ -19,8 +19,11 @@ export async function downloadPdf({
   subject,
   body,
   images = [],
+  signature = "",
 }: ExportPayload): Promise<void> {
   const { jsPDF } = await import("jspdf");
+
+  const contenido = withSignature(body, signature);
 
   const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
@@ -59,7 +62,7 @@ export async function downloadPdf({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(BODY_SIZE);
 
-  for (const rawLine of toLines(body)) {
+  for (const rawLine of toLines(contenido)) {
     if (!rawLine.trim()) {
       y += LINE_HEIGHT * 0.6;
       continue;
