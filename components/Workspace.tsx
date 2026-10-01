@@ -27,6 +27,7 @@ import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import { cargarFirmaPorDefecto, hayFirmaDeSerie } from "@/lib/firma-por-defecto";
 import { downloadDocx } from "@/lib/export/docx";
 import { downloadPdf } from "@/lib/export/pdf";
+import { endsWithSignature } from "@/lib/export/layout";
 import { resolveTargetLang } from "@/lib/prompts";
 import { cn } from "@/lib/utils";
 import {
@@ -344,6 +345,25 @@ export function Workspace() {
     [output, toast],
   );
 
+  /**
+   * Copia el texto con la firma al final, para pegarlo en el correo.
+   * Si el texto ya termina con ella (un correo generado), no se repite.
+   */
+  const copySigned = useCallback(async () => {
+    if (!output) return false;
+
+    const firma = prefs.signature.trim();
+    const nombre = firma.split("\n")[0] ?? "";
+    const texto =
+      !firma || endsWithSignature(output, nombre)
+        ? output
+        : `${output.replace(/\s+$/, "")}\n\n${firma}`;
+
+    const ok = await writeClipboard(texto);
+    toast(ok ? "Copiado con tu firma" : "No se pudo copiar", ok ? "success" : "error");
+    return ok;
+  }, [output, prefs.signature, toast]);
+
   const pasteFromClipboard = useCallback(async () => {
     const clipboard = await readClipboard();
     if (clipboard === null) {
@@ -547,10 +567,6 @@ export function Workspace() {
             signature={prefs.signature}
             onSignatureChange={(value) => updatePrefs({ signature: value })}
             signatureImage={signatureImage}
-            onSignatureImageChange={(imagen) => {
-              setSignatureImage(imagen);
-              saveSignatureImage(imagen);
-            }}
           />
 
           {/* En movil se ve un panel a la vez: dos cuadros altos obligaban a
@@ -616,6 +632,7 @@ export function Workspace() {
               route={route}
               unchanged={unchanged}
               onCopy={copyResult}
+              onCopySigned={copySigned}
               onDownloadDocx={() => void handleExport("docx")}
               onDownloadPdf={() => void handleExport("pdf")}
               onPrint={() => window.print()}

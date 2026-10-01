@@ -1,10 +1,7 @@
 "use client";
 
-import { PenLine, Sparkles, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { ImageAttachments } from "@/components/ImageAttachments";
-import { useToast } from "@/components/ui/Toast";
-import { ACCEPTED_TYPES, prepareSignatureImage } from "@/lib/images";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { TEXT_TYPES, TONES } from "@/lib/actions";
@@ -27,7 +24,6 @@ interface OptionsBarProps {
   signature: string;
   onSignatureChange: (signature: string) => void;
   signatureImage: SignatureDrawing | null;
-  onSignatureImageChange: (image: SignatureDrawing | null) => void;
 }
 
 export function OptionsBar({
@@ -47,28 +43,7 @@ export function OptionsBar({
   signature,
   onSignatureChange,
   signatureImage,
-  onSignatureImageChange,
 }: OptionsBarProps) {
-  const { toast } = useToast();
-  const firmaInput = useRef<HTMLInputElement>(null);
-  const [subiendoFirma, setSubiendoFirma] = useState(false);
-
-  const subirFirma = async (file: File | undefined) => {
-    if (!file) return;
-    setSubiendoFirma(true);
-    try {
-      onSignatureImageChange(await prepareSignatureImage(file));
-      toast("Firma escaneada lista");
-    } catch (error) {
-      console.error("[paula] no se pudo preparar la firma:", error);
-      toast(
-        error instanceof Error ? error.message : "No pudimos usar esa imagen",
-        "error",
-      );
-    } finally {
-      setSubiendoFirma(false);
-    }
-  };
   const isEmail = textType === "email";
   const isReport = textType === "report";
 
@@ -135,56 +110,20 @@ export function OptionsBar({
 Cargo (opcional)`}
             className="scroll-slim w-full resize-none rounded-xl border border-line bg-surface px-3 py-2.5 text-sm leading-relaxed text-ink outline-none transition-colors hover:border-line-strong placeholder:text-muted/70"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            {signatureImage ? (
-              <span className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-2.5 py-1.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={signatureImage.dataUrl}
-                  alt="Tu firma escaneada"
-                  className="h-8 w-auto max-w-[150px] object-contain"
-                />
-              </span>
-            ) : null}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => firmaInput.current?.click()}
-              loading={subiendoFirma}
-              icon={<PenLine aria-hidden className="size-4" />}
-            >
-              {signatureImage ? "Cambiar firma escaneada" : "Subir firma escaneada"}
-            </Button>
-            {signatureImage ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  onSignatureImageChange(null);
-                  toast("Firma escaneada quitada");
-                }}
-                icon={<Trash2 aria-hidden className="size-4" />}
-              >
-                Quitar
-              </Button>
-            ) : null}
-            <input
-              ref={firmaInput}
-              type="file"
-              accept={ACCEPTED_TYPES}
-              className="sr-only"
-              aria-label="Subir una foto de tu firma"
-              onChange={(event) => {
-                void subirFirma(event.target.files?.[0]);
-                event.target.value = "";
-              }}
-            />
-          </div>
+          {signatureImage ? (
+            <div className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={signatureImage.dataUrl}
+                alt="Tu firma"
+                className="h-9 w-auto max-w-[190px] object-contain"
+              />
+            </div>
+          ) : null}
           <p className="text-[11px] leading-relaxed text-muted">
             El nombre se escribe al final cuando usas{" "}
-            <strong className="font-medium text-ink-soft">Generar correo</strong>. Si subes una
-            foto de tu firma, sale dibujada sobre la línea en el Word, el PDF y la impresión.
-            Todo se guarda: solo hay que ponerlo una vez.
+            <strong className="font-medium text-ink-soft">Generar correo</strong>, y tu firma
+            sale dibujada sobre la línea en el Word, el PDF y la impresión.
           </p>
         </div>
       ) : null}

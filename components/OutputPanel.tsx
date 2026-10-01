@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, FileDown, FileText, Mail, Plane, Printer, Type } from "lucide-react";
+import { Check, Copy, FileDown, FileText, Mail, PenLine, Plane, Printer, Type } from "lucide-react";
 import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -21,6 +21,8 @@ interface OutputPanelProps {
   /** El resultado es identico al texto original. */
   unchanged: boolean;
   onCopy: (plain: boolean) => Promise<boolean>;
+  /** Copia el texto con la firma al final, listo para pegar en el correo. */
+  onCopySigned: () => Promise<boolean>;
   onDownloadDocx: () => void;
   onDownloadPdf: () => void;
   onPrint: () => void;
@@ -54,6 +56,7 @@ export function OutputPanel({
   route,
   unchanged,
   onCopy,
+  onCopySigned,
   onDownloadDocx,
   onDownloadPdf,
   onPrint,
@@ -61,7 +64,7 @@ export function OutputPanel({
   busyExport,
   className,
 }: OutputPanelProps) {
-  const [copied, setCopied] = useState<"rich" | "plain" | null>(null);
+  const [copied, setCopied] = useState<"rich" | "plain" | "firma" | null>(null);
   const [tardando, setTardando] = useState(false);
   const loading = status === "loading";
 
@@ -81,6 +84,13 @@ export function OutputPanel({
     const ok = await onCopy(plain);
     if (!ok) return;
     setCopied(plain ? "plain" : "rich");
+    window.setTimeout(() => setCopied(null), 2000);
+  };
+
+  const copyWithSignature = async () => {
+    const ok = await onCopySigned();
+    if (!ok) return;
+    setCopied("firma");
     window.setTimeout(() => setCopied(null), 2000);
   };
 
@@ -172,6 +182,22 @@ export function OutputPanel({
           }
         >
           {copied === "rich" ? "Copiado" : "Copiar"}
+        </Button>
+        <Button
+          size="sm"
+          variant="quiet"
+          onClick={() => void copyWithSignature()}
+          disabled={!hasOutput}
+          title="Copia el texto con tu firma al final, listo para pegar en el correo"
+          icon={
+            copied === "firma" ? (
+              <Check aria-hidden className="size-4" />
+            ) : (
+              <PenLine aria-hidden className="size-4" />
+            )
+          }
+        >
+          {copied === "firma" ? "Copiado" : "Con firma"}
         </Button>
         <Button
           size="sm"

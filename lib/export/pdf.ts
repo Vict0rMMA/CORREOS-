@@ -104,7 +104,7 @@ export async function downloadPdf({
   // --- Bloque de firma ---
   if (firma) {
     const altoFirma = signatureImage
-      ? Math.min(52, (signatureImage.height / signatureImage.width) * 160)
+      ? Math.min(58, (signatureImage.height / signatureImage.width) * 210)
       : 0;
     const alto = 34 + (closing ? 22 : 0) + altoFirma + 18 + firma.details.length * 13;
     ensure(alto);
@@ -121,9 +121,9 @@ export async function downloadPdf({
 
     if (signatureImage) {
       // La firma escaneada se apoya sobre la linea.
-      const ancho = Math.min(160, (signatureImage.width / signatureImage.height) * altoFirma);
+      const ancho = Math.min(210, (signatureImage.width / signatureImage.height) * altoFirma);
       doc.addImage(signatureImage.dataUrl, "PNG", MARGIN, y, ancho, altoFirma, undefined, "FAST");
-      y += altoFirma + 2;
+      y += altoFirma + 4;
     }
 
     // Linea sobre la que se firma a mano

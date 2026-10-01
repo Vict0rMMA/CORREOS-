@@ -23,8 +23,8 @@ const CONTENT_WIDTH_PX = 624;
 const MAX_IMAGE_HEIGHT_PX = 460;
 
 /** Tamano maximo de la firma escaneada, en pixeles a 96 ppp. */
-const SIGNATURE_WIDTH_PX = 220;
-const SIGNATURE_HEIGHT_PX = 70;
+const SIGNATURE_WIDTH_PX = 280;
+const SIGNATURE_HEIGHT_PX = 78;
 
 /** Gris de los textos secundarios. */
 const GREY = "6B7C93";

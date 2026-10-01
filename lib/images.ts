@@ -128,10 +128,10 @@ export interface SignatureImage {
 
 /** Ancho maximo; de sobra para imprimir bien. */
 const SIGNATURE_MAX_WIDTH = 700;
-/** Por encima de este brillo se considera papel, no tinta. */
-const PAPER_LEVEL = 205;
-/** Por debajo de este, tinta segura. */
-const INK_LEVEL = 120;
+/** Cuanto mas oscuro que el papel tiene que ser un pixel para contar como tinta. */
+const MARGEN_PAPEL = 26;
+/** A partir de esta diferencia, tinta plena. */
+const MARGEN_TINTA = 100;
 
 export async function prepareSignatureImage(file: File): Promise<SignatureImage> {
   if (!isSupportedImage(file)) throw new Error(`"${file.name}" no es una imagen`);
@@ -158,6 +158,26 @@ export async function prepareSignatureImage(file: File): Promise<SignatureImage>
   const imagen = context.getImageData(0, 0, width, height);
   const pixeles = imagen.data;
 
+  const brillo = (indice: number) =>
+    0.299 * pixeles[indice] + 0.587 * pixeles[indice + 1] + 0.114 * pixeles[indice + 2];
+
+  // El papel no siempre es blanco: se mide en los bordes y los umbrales se
+  // ajustan a el, asi funciona igual con una foto de movil que con un escaneo.
+  const muestras: number[] = [];
+  for (let x = 0; x < width; x += 2) {
+    muestras.push(brillo((0 * width + x) * 4));
+    muestras.push(brillo(((height - 1) * width + x) * 4));
+  }
+  for (let y = 0; y < height; y += 2) {
+    muestras.push(brillo((y * width) * 4));
+    muestras.push(brillo((y * width + width - 1) * 4));
+  }
+  muestras.sort((a, b) => a - b);
+  const papel = muestras[Math.floor(muestras.length / 2)] ?? 255;
+
+  const nivelPapel = papel - MARGEN_PAPEL;
+  const nivelTinta = papel - MARGEN_TINTA;
+
   // Limites de la tinta, para recortar el papel sobrante alrededor.
   let minX = width;
   let minY = height;
@@ -167,18 +187,18 @@ export async function prepareSignatureImage(file: File): Promise<SignatureImage>
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const i = (y * width + x) * 4;
-      const brillo = 0.299 * pixeles[i] + 0.587 * pixeles[i + 1] + 0.114 * pixeles[i + 2];
+      const nivel = brillo(i);
 
-      if (brillo >= PAPER_LEVEL) {
+      if (nivel >= nivelPapel) {
         pixeles[i + 3] = 0; // papel: transparente
         continue;
       }
 
       // Entre tinta y papel se suaviza, para que el trazo no quede dentado.
       const opacidad =
-        brillo <= INK_LEVEL
+        nivel <= nivelTinta
           ? 255
-          : Math.round(255 * ((PAPER_LEVEL - brillo) / (PAPER_LEVEL - INK_LEVEL)));
+          : Math.round(255 * ((nivelPapel - nivel) / (nivelPapel - nivelTinta)));
       pixeles[i + 3] = Math.min(pixeles[i + 3], opacidad);
 
       if (opacidad > 40) {
@@ -190,6 +210,57 @@ export async function prepareSignatureImage(file: File): Promise<SignatureImage>
     }
   }
 
+  if (maxX < 0) throw new Error("No encontramos ninguna firma en esa imagen");
+
+  // Los escaneos suelen traer la raya del papel sobre la que se firmo. El
+  // documento ya dibuja la suya, asi que se quitan las filas que son una linea
+  // recta de lado a lado.
+  const anchoTinta = maxX - minX + 1;
+  for (let y = 0; y < height; y += 1) {
+    let seguidos = 0;
+    let mayorSeguido = 0;
+    for (let x = minX; x <= maxX; x += 1) {
+      const opaco = pixeles[(y * width + x) * 4 + 3] > 40;
+      seguidos = opaco ? seguidos + 1 : 0;
+      if (seguidos > mayorSeguido) mayorSeguido = seguidos;
+    }
+    // Un trazo de firma nunca cruza casi toda la imagen en una sola fila.
+    if (mayorSeguido > anchoTinta * 0.6) {
+      for (let x = 0; x < width; x += 1) pixeles[(y * width + x) * 4 + 3] = 0;
+    }
+  }
+
+  // Lo mismo en vertical: el borde de la hoja o la sombra del movil dejan una
+  // franja oscura de arriba abajo que no es parte de la firma.
+  const altoTinta = maxY - minY + 1;
+  for (let x = 0; x < width; x += 1) {
+    let seguidos = 0;
+    let mayorSeguido = 0;
+    for (let y = minY; y <= maxY; y += 1) {
+      const opaco = pixeles[(y * width + x) * 4 + 3] > 40;
+      seguidos = opaco ? seguidos + 1 : 0;
+      if (seguidos > mayorSeguido) mayorSeguido = seguidos;
+    }
+    if (mayorSeguido > altoTinta * 0.75) {
+      for (let y = 0; y < height; y += 1) pixeles[(y * width + x) * 4 + 3] = 0;
+    }
+  }
+
+  // Tras quitar las rayas hay que recalcular hasta donde llega la tinta.
+  minX = width;
+  minY = height;
+  maxX = -1;
+  maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (pixeles[(y * width + x) * 4 + 3] > 40) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
   if (maxX < 0) throw new Error("No encontramos ninguna firma en esa imagen");
 
   context.putImageData(imagen, 0, 0);

@@ -161,11 +161,17 @@ anade sola. Para cambiarla hay dos sitios:
 
 ### Firma escaneada
 
-La aplicacion trae una firma de serie: la imagen `public/firma.png` (una foto
-de la firma sobre papel, sin recortar). Al abrirla por primera vez se procesa
-sola y queda guardada en el navegador, asi que aparece en los documentos sin
-tener que hacer nada. Para cambiarla, se reemplaza ese archivo o se usa el
-boton **Subir firma escaneada**.
+La firma a mano esta fija en `public/firma.png`: basta una foto del movil
+sobre papel, sin recortar. La aplicacion la prepara sola al abrirse:
+
+- Mide el brillo del papel en los bordes y ajusta el umbral, asi le da igual
+  que la hoja sea blanca, gris o amarillenta.
+- Deja el trazo con su color y el resto transparente.
+- Quita las rayas rectas (la linea del renglon, la sombra del borde de la
+  hoja) y recorta a la tinta.
+
+Para cambiarla, se reemplaza ese archivo. Si se quita, los documentos siguen
+saliendo bien, solo que sin la firma dibujada.
 
 Con **Subir firma escaneada** se puede poner una foto de la firma a mano. La
 aplicacion recorta la imagen a la zona con tinta y le quita el papel del fondo,
@@ -180,8 +186,11 @@ Donde aparece:
 - En los correos de **Generar correo**, despues de la despedida.
 - Al final del **Word**, el **PDF** y la **impresion**, sea cual sea el texto.
   Si el texto ya termina con ella (un correo generado), no se repite.
-- **No** se anade al resultado en pantalla ni a lo que se copia: ahi queda
+- **No** se anade al resultado en pantalla ni al boton Copiar: ahi queda
   exactamente lo que devolvio la IA.
+- El boton **Con firma** copia el texto con el nombre escrito al final, listo
+  para pegar en el correo (donde no se puede pegar la firma dibujada). Si el
+  texto ya la trae, no se repite.
 
 Un correo generado queda asi:
 
