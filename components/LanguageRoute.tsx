@@ -23,6 +23,8 @@ interface LanguageRouteProps {
   target: Lang;
   onTargetChange: (lang: Lang) => void;
   onSwap: () => void;
+  /** En la pestana de planillas el aviso habla de la tabla, no de correos. */
+  esPlanilla?: boolean;
 }
 
 /**
@@ -37,6 +39,7 @@ export function LanguageRoute({
   target,
   onTargetChange,
   onSwap,
+  esPlanilla = false,
 }: LanguageRouteProps) {
   const swapButton = (
     <button
@@ -96,8 +99,9 @@ export function LanguageRoute({
         {EN_FRASE[source]} a {EN_FRASE[target]}.{" "}
         <span className="sm:hidden">Las demás acciones responden en {EN_FRASE[source]}.</span>
         <span className="hidden sm:inline">
-          Corregir, Mejorar y Generar correo no cambian el idioma: responden en{" "}
-          {EN_FRASE[source]}.
+          {esPlanilla
+            ? `Organizar no cambia el idioma: la tabla se queda en ${EN_FRASE[source]}.`
+            : `Corregir, Mejorar y Generar correo no cambian el idioma: responden en ${EN_FRASE[source]}.`}
         </span>
       </p>
     </div>

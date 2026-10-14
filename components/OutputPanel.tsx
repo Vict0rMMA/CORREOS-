@@ -38,6 +38,8 @@ interface OutputPanelProps {
   lang: Lang;
   /** Hay algo que bajar a Excel: una planilla o un reporte numerado. */
   canExportXlsx: boolean;
+  /** Pestana de planillas: aqui no pintan las cosas de correo. */
+  esPlanilla: boolean;
   onCopy: (plain: boolean) => Promise<boolean>;
   /** Copia el texto con la firma al final, listo para pegar en el correo. */
   onCopySigned: () => Promise<boolean>;
@@ -135,6 +137,7 @@ export function OutputPanel({
   table,
   lang,
   canExportXlsx,
+  esPlanilla,
   onCopy,
   onCopySigned,
   onDownloadDocx,
@@ -237,9 +240,13 @@ export function OutputPanel({
           <div className="flex h-full flex-col items-center justify-center gap-4 py-8 text-center">
             <FlightStrip flying={false} />
             <div className="space-y-2">
-              <p className="title-serif text-[22px] text-ink-soft">Aquí aterriza tu texto</p>
+              <p className="title-serif text-[22px] text-ink-soft">
+                {esPlanilla ? "Aquí aterriza tu planilla" : "Aquí aterriza tu texto"}
+              </p>
               <p className="max-w-[36ch] text-[13px] leading-relaxed text-muted">
-                Corregido, traducido o generado. Elige una acción y pulsa{" "}
+                {esPlanilla
+                  ? "La tabla, lista para bajar a Excel. Elige una acción y pulsa "
+                  : "Corregido, traducido o generado. Elige una acción y pulsa "}
                 <kbd className="whitespace-nowrap rounded-md border border-line bg-surface-soft px-1.5 py-0.5 font-sans text-[11px] text-ink-soft">
                   Ctrl + Enter
                 </kbd>
@@ -266,6 +273,7 @@ export function OutputPanel({
         >
           {copied === "rich" ? "Copiado" : "Copiar"}
         </Button>
+        {esPlanilla ? null : (
         <Button
           size="sm"
           variant="quiet"
@@ -282,6 +290,7 @@ export function OutputPanel({
         >
           {copied === "firma" ? "Copiado" : "Con firma"}
         </Button>
+        )}
         <Button
           size="sm"
           variant="quiet"

@@ -4,10 +4,13 @@ import { Sparkles } from "lucide-react";
 import { ImageAttachments } from "@/components/ImageAttachments";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
-import { TEXT_TYPES, TONES } from "@/lib/actions";
-import type { ReportImage, SignatureDrawing, TextType, Tone } from "@/types";
+import { cn } from "@/lib/utils";
+import { TIPOS_DE_CORREO, TONES } from "@/lib/actions";
+import type { ReportImage, Seccion, SignatureDrawing, TextType, Tone } from "@/types";
 
 interface OptionsBarProps {
+  /** Pestana activa: en planillas no se enseña nada de correos. */
+  seccion: Seccion;
   tone: Tone;
   onToneChange: (tone: Tone) => void;
   textType: TextType;
@@ -30,6 +33,7 @@ interface OptionsBarProps {
 }
 
 export function OptionsBar({
+  seccion,
   tone,
   onToneChange,
   textType,
@@ -49,20 +53,22 @@ export function OptionsBar({
   includeLogo,
   onIncludeLogoChange,
 }: OptionsBarProps) {
-  const isEmail = textType === "email";
-  const isReport = textType === "report";
-  const isSheet = textType === "sheet";
+  const isSheet = seccion === "planillas";
+  const isEmail = !isSheet && textType === "email";
+  const isReport = !isSheet && textType === "report";
 
   return (
     <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
-      {/* grid-cols-1 explicito: sin el, la columna implicita toma el ancho
-          maximo del <select> y desborda en pantallas estrechas. */}
+      {/* En planillas no se enseña nada de esto: ni tono, ni tipo de texto,
+          ni asunto. grid-cols-1 explicito: sin el, la columna implicita toma
+          el ancho maximo del <select> y desborda en pantallas estrechas. */}
+      {isSheet ? null : (
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.6fr)]">
         <Select label="Tono" value={tone} options={TONES} onChange={onToneChange} />
         <Select
           label="Tipo de texto"
           value={textType}
-          options={TEXT_TYPES}
+          options={TIPOS_DE_CORREO}
           onChange={onTextTypeChange}
         />
 
@@ -100,6 +106,7 @@ export function OptionsBar({
           </div>
         ) : null}
       </div>
+      )}
 
       {isEmail ? (
         <div className="mt-3 flex flex-col gap-1.5 border-t border-line pt-3">
@@ -137,7 +144,7 @@ Cargo (opcional)`}
       {isReport ? <ImageAttachments images={images} onChange={onImagesChange} /> : null}
 
       {isSheet ? (
-        <p className="mt-3 border-t border-line pt-3 text-[11px] leading-relaxed text-muted">
+        <p className="text-[11px] leading-relaxed text-muted">
           Copia la tabla desde Excel y pégala tal cual: las matrículas, las puertas y las
           horas se respetan exactamente y solo se traduce el texto. También sirve escribirla
           a mano; el resultado se descarga en{" "}

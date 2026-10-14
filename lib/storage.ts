@@ -1,6 +1,6 @@
 import { isTextType, isTone } from "@/lib/actions";
 import { DEFAULT_SIGNATURE, HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
-import type { HistoryItem, Prefs, SignatureDrawing } from "@/types";
+import type { HistoryItem, Prefs, Seccion, SignatureDrawing } from "@/types";
 
 /**
  * Persistencia local. Todo va envuelto en try/catch porque localStorage
@@ -8,6 +8,7 @@ import type { HistoryItem, Prefs, SignatureDrawing } from "@/types";
  */
 
 export const DEFAULT_PREFS: Prefs = {
+  seccion: "correos",
   lang: "es",
   targetLang: "en",
   tone: "professional",
@@ -53,6 +54,7 @@ export function loadPrefs(): Prefs {
         ? merged.signature
         : DEFAULT_SIGNATURE,
     includeLogo: merged.includeLogo !== false,
+    seccion: merged.seccion === "planillas" ? "planillas" : "correos",
   };
 }
 
@@ -60,19 +62,24 @@ export function savePrefs(prefs: Prefs): void {
   write(STORAGE_KEYS.prefs, prefs);
 }
 
-export function loadDraft(): string {
+/** Cada pestana guarda su borrador por separado. */
+function claveBorrador(seccion: Seccion): string {
+  return seccion === "planillas" ? STORAGE_KEYS.draftSheet : STORAGE_KEYS.draft;
+}
+
+export function loadDraft(seccion: Seccion): string {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(STORAGE_KEYS.draft) ?? "";
+    return window.localStorage.getItem(claveBorrador(seccion)) ?? "";
   } catch {
     return "";
   }
 }
 
-export function saveDraft(text: string): void {
+export function saveDraft(seccion: Seccion, text: string): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEYS.draft, text);
+    window.localStorage.setItem(claveBorrador(seccion), text);
   } catch {
     /* ignorado */
   }

@@ -32,6 +32,8 @@ interface InputPanelProps {
   onUndo?: () => void;
   onPaste: () => void;
   pasteEnabled: boolean;
+  /** En planillas el ejemplo del recuadro es una tabla, no un correo. */
+  esPlanilla?: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   className?: string;
 }
@@ -47,6 +49,7 @@ export function InputPanel({
   onUndo,
   onPaste,
   pasteEnabled,
+  esPlanilla = false,
   textareaRef,
   className,
 }: InputPanelProps) {
@@ -144,7 +147,11 @@ export function InputPanel({
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         spellCheck={false}
-        placeholder={"Escribe, pega o dicta tu texto aquí...\n\nEjemplo: Hola profe, quería preguntarle si puedo faltar el viernes porque tengo otra clase."}
+        placeholder={
+          esPlanilla
+            ? "Pega aquí la tabla copiada de Excel...\n\nEjemplo:\nEMPLEADO\tAVIÓN\tPUERTA\tHORA ASIGNADO\nJ. Pérez\tN123AV\tB4\t07:30"
+            : "Escribe, pega o dicta tu texto aquí...\n\nEjemplo: Hola profe, quería preguntarle si puedo faltar el viernes porque tengo otra clase."
+        }
         className={cn(
           "scroll-slim min-h-[190px] flex-1 resize-none bg-transparent px-4 py-4 text-[16px]",
           "leading-[1.75] text-ink outline-none placeholder:text-muted/70 sm:px-5 lg:min-h-[420px]",

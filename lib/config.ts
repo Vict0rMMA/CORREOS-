@@ -29,6 +29,9 @@ export const STORAGE_KEYS = {
   prefs: "paula:prefs",
   history: "paula:history",
   draft: "paula:draft",
+  // La planilla tiene su propio borrador: cambiar de pestana no puede
+  // pisar lo que se estaba escribiendo en la otra.
+  draftSheet: "paula:draft-planilla",
   // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
   // El numero sube cuando hay que descartar lo guardado en los navegadores:
   // asi nadie se queda con una firma que ya no corresponde.

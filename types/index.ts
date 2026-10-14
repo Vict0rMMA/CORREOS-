@@ -11,6 +11,13 @@ export type Tone =
 export type TextType = "email" | "report" | "message" | "sheet";
 
 /**
+ * Las dos mitades de la aplicacion, cada una con su pestana.
+ * Los correos y las planillas no se mezclan: cada seccion tiene su borrador,
+ * su resultado y sus guardados.
+ */
+export type Seccion = "correos" | "planillas";
+
+/**
  * Como tiene que venir la respuesta del modelo.
  * "table" solo lo usa la planilla: en vez de texto corrido devuelve el JSON
  * de la tabla, que es lo que luego se vuelca a Excel, Word o PDF.
@@ -113,6 +120,8 @@ export interface HistoryItem {
 }
 
 export interface Prefs {
+  /** Pestana en la que se abre la aplicacion. */
+  seccion: Seccion;
   lang: Lang;
   /** Idioma al que traduce el boton Traducir. */
   targetLang: Lang;

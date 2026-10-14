@@ -78,7 +78,14 @@ page.on("pageerror", (error) => informe.anotarError(`error de página: ${error.m
 await page.goto(URL_BASE, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(2500);
 
-await page.getByLabel("Tipo de texto").selectOption("sheet");
+await page.getByRole("tab", { name: /Planillas/ }).click();
+await page.waitForTimeout(300);
+informe.comprobar(
+  "la pestaña de planillas no enseña cosas de correos",
+  (await page.getByLabel("Tipo de texto").count()) === 0 &&
+    (await page.getByText("Acciones rápidas").count()) === 0,
+);
+
 await page.fill("#paula-input", TABLA);
 await page.waitForTimeout(300);
 

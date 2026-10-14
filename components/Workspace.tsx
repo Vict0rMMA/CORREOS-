@@ -11,8 +11,10 @@ import { OptionsBar } from "@/components/OptionsBar";
 import { OutputPanel, type Route } from "@/components/OutputPanel";
 import { PrintSheet } from "@/components/PrintSheet";
 import { QuickActions } from "@/components/QuickActions";
+import { SectionTabs } from "@/components/SectionTabs";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useToast } from "@/components/ui/Toast";
+import { MAIN_ACTIONS, SHEET_ACTIONS } from "@/lib/actions";
 import {
   MAX_MAILTO_LENGTH,
   buildMailto,
@@ -50,6 +52,7 @@ import type {
   Lang,
   Prefs,
   ReportImage,
+  Seccion,
   SignatureDrawing,
   Status,
   SubjectResponse,
@@ -63,6 +66,45 @@ const GENERIC_ERROR =
 
 /** Como se llama cada descarga en el aviso de "listo". */
 const NOMBRES_EXPORT = { docx: "Word", pdf: "PDF", xlsx: "Excel" } as const;
+
+/** Lo que cambia al saltar de una pestana a la otra. */
+interface Contenido {
+  text: string;
+  output: string;
+  table: TableData | null;
+  subject: string;
+  subjectOptions: string[];
+  images: ReportImage[];
+  outputLang: Lang;
+  status: Status;
+  error: string | null;
+  route: Route | null;
+  unchanged: boolean;
+  previousText: string | null;
+  primaryAction: Action;
+  langOverride: Lang | null;
+}
+
+/** Pestana recien abierta, sin nada escrito. */
+function vacio(seccion: Seccion): Contenido {
+  return {
+    text: "",
+    output: "",
+    table: null,
+    subject: "",
+    subjectOptions: [],
+    images: [],
+    outputLang: "es",
+    status: "idle",
+    error: null,
+    route: null,
+    unchanged: false,
+    previousText: null,
+    // En una planilla lo normal es traducir; en un correo, corregir.
+    primaryAction: seccion === "planillas" ? "translate" : "correct",
+    langOverride: null,
+  };
+}
 
 export function Workspace() {
   const { toast } = useToast();
@@ -81,6 +123,14 @@ export function Workspace() {
    * un correo en ingles se descarga con el encabezado y la fecha en ingles.
    */
   const [outputLang, setOutputLang] = useState<Lang>("es");
+
+  // ----- pestana -----
+  /**
+   * Correos y planillas van por separado: lo que hay escrito en una se guarda
+   * aqui al cambiar de pestana y vuelve tal cual al regresar.
+   */
+  const [seccion, setSeccion] = useState<Seccion>("correos");
+  const otraPestana = useRef<Contenido>(vacio("planillas"));
 
   // ----- preferencias -----
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -113,9 +163,16 @@ export function Workspace() {
 
   // ----- carga inicial (localStorage) -----
   useEffect(() => {
-    setPrefs(loadPrefs());
+    const guardadas = loadPrefs();
+    const abierta = guardadas.seccion;
+    const otra: Seccion = abierta === "correos" ? "planillas" : "correos";
+
+    setPrefs(guardadas);
     setHistory(loadHistory());
-    setText(loadDraft());
+    setSeccion(abierta);
+    setText(loadDraft(abierta));
+    // El borrador de la otra pestana espera listo, sin pisar el de esta.
+    otraPestana.current = { ...vacio(otra), text: loadDraft(otra) };
     const guardada = loadSignatureImage();
     if (guardada?.deSerie) {
       // Venia del archivo de la aplicacion: si ese archivo ya no esta, se
@@ -161,26 +218,32 @@ export function Workspace() {
     // Sin esta guarda, el primer render guardaria los valores por defecto
     // encima de lo que el usuario tenia guardado, y se perdia todo al recargar.
     if (!hydrated) return;
-    savePrefs({ ...prefs, lang });
-  }, [hydrated, prefs, lang]);
+    savePrefs({ ...prefs, lang, seccion });
+  }, [hydrated, prefs, lang, seccion]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => saveDraft(text), 400);
+    const timer = window.setTimeout(() => saveDraft(seccion, text), 400);
     return () => window.clearTimeout(timer);
-  }, [text]);
+  }, [seccion, text]);
 
   const updatePrefs = useCallback((patch: Partial<Prefs>) => {
     setPrefs((current) => ({ ...current, ...patch }));
   }, []);
 
+  /** La planilla devuelve una tabla en vez de texto corrido. */
+  const esPlanilla = seccion === "planillas";
+
+  /**
+   * Tipo de texto que vale ahora mismo. En la pestana de planillas siempre es
+   * "sheet"; en la de correos, el del selector.
+   */
+  const textType: TextType = esPlanilla ? "sheet" : prefs.textType;
+
   /** Titulo del documento, en el idioma del resultado. */
   const typeLabel = useMemo(
-    () => documentTitle(prefs.textType, outputLang),
-    [outputLang, prefs.textType],
+    () => documentTitle(textType, outputLang),
+    [outputLang, textType],
   );
-
-  /** La planilla devuelve una tabla en vez de texto corrido. */
-  const esPlanilla = prefs.textType === "sheet";
 
   const pushHistory = useCallback(
     (item: HistoryItem) => {
@@ -244,9 +307,9 @@ export function Workspace() {
             text: source,
             lang,
             tone: prefs.tone,
-            textType: prefs.textType,
-            subject: prefs.textType === "email" ? subject : undefined,
-            signature: prefs.textType === "email" ? prefs.signature : undefined,
+            textType,
+            subject: textType === "email" ? subject : undefined,
+            signature: textType === "email" ? prefs.signature : undefined,
             format: esPlanilla ? "table" : "text",
           }),
         });
@@ -305,10 +368,10 @@ export function Workspace() {
           preview: source.slice(0, 90),
           input: source,
           output: finalText,
-          subject: prefs.textType === "email" ? subject : undefined,
+          subject: textType === "email" ? subject : undefined,
           lang: target,
           action,
-          textType: prefs.textType,
+          textType,
           tone: prefs.tone,
           createdAt: Date.now(),
           table: hoja ?? undefined,
@@ -329,8 +392,8 @@ export function Workspace() {
       esPlanilla,
       lang,
       prefs.signature,
-      prefs.textType,
       prefs.tone,
+      textType,
       pushHistory,
       resolveRunnable,
       subject,
@@ -418,7 +481,7 @@ export function Workspace() {
   const openMail = useCallback(async () => {
     if (!output) return;
 
-    const asunto = prefs.textType === "email" ? subject.trim() : "";
+    const asunto = textType === "email" ? subject.trim() : "";
     const enlace = buildMailto({ subject: asunto, body: output });
 
     // Los enlaces mailto tienen un limite: si el correo es largo, se copia el
@@ -436,18 +499,18 @@ export function Workspace() {
     }
 
     window.location.href = enlace;
-  }, [output, prefs.textType, subject, toast]);
+  }, [output, subject, textType, toast]);
 
   // ----- exportar -----
   const exportPayload = useMemo(
     () => ({
       // La planilla lleva su propio titulo; el resto, el del tipo de texto.
       title: table?.title || typeLabel,
-      subject: prefs.textType === "email" && subject.trim() ? subject.trim() : undefined,
+      subject: textType === "email" && subject.trim() ? subject.trim() : undefined,
       body: output,
       // El documento se escribe en el idioma del resultado, no en el de la app.
       lang: outputLang,
-      images: prefs.textType === "report" ? images : undefined,
+      images: textType === "report" ? images : undefined,
       table,
       signature: prefs.signature,
       signatureImage,
@@ -459,10 +522,10 @@ export function Workspace() {
       outputLang,
       prefs.includeLogo,
       prefs.signature,
-      prefs.textType,
       signatureImage,
       subject,
       table,
+      textType,
       typeLabel,
     ],
   );
@@ -473,9 +536,9 @@ export function Workspace() {
    */
   const tablaExcel = useMemo(() => {
     if (table) return table;
-    if (prefs.textType !== "report" || !output.trim()) return null;
+    if (textType !== "report" || !output.trim()) return null;
     return tablaDeParrafos(output, outputLang, subject.trim() || typeLabel);
-  }, [output, outputLang, prefs.textType, subject, table, typeLabel]);
+  }, [output, outputLang, subject, table, textType, typeLabel]);
 
   const handleExport = useCallback(
     async (kind: "docx" | "pdf" | "xlsx") => {
@@ -521,9 +584,76 @@ export function Workspace() {
     setSubjectOptions([]);
     setStatus("idle");
     setError(null);
-    saveDraft("");
+    saveDraft(seccion, "");
     textareaRef.current?.focus();
-  }, []);
+  }, [seccion]);
+
+  /**
+   * Cambia de pestana guardando lo que habia en la actual.
+   * Al volver, el texto, el resultado y la tabla estan donde se dejaron.
+   */
+  const cambiarSeccion = useCallback(
+    (destino: Seccion) => {
+      if (destino === seccion) return;
+
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setRunning(null);
+
+      const actual: Contenido = {
+        text,
+        output,
+        table,
+        subject,
+        subjectOptions,
+        images,
+        outputLang,
+        status,
+        error,
+        route,
+        unchanged,
+        previousText,
+        primaryAction,
+        langOverride,
+      };
+      const llega = otraPestana.current;
+      otraPestana.current = actual;
+
+      setSeccion(destino);
+      setText(llega.text);
+      setOutput(llega.output);
+      setTable(llega.table);
+      setSubject(llega.subject);
+      setSubjectOptions(llega.subjectOptions);
+      setImages(llega.images);
+      setOutputLang(llega.outputLang);
+      setStatus(llega.status);
+      setError(llega.error);
+      setRoute(llega.route);
+      setUnchanged(llega.unchanged);
+      setPreviousText(llega.previousText);
+      setPrimaryAction(llega.primaryAction);
+      setLangOverride(llega.langOverride);
+      setMobileView("input");
+    },
+    [
+      error,
+      images,
+      langOverride,
+      output,
+      outputLang,
+      previousText,
+      primaryAction,
+      route,
+      seccion,
+      status,
+      subject,
+      subjectOptions,
+      table,
+      text,
+      unchanged,
+    ],
+  );
 
   /** Vuelve al texto que habia antes del ultimo encadenado. */
   const undoChain = useCallback(() => {
@@ -541,7 +671,12 @@ export function Workspace() {
     setTable(item.table ?? null);
     setOutputLang(item.lang);
     setSubject(item.subject ?? "");
-    setPrefs((current) => ({ ...current, tone: item.tone, textType: item.textType }));
+    setPrefs((current) => ({
+      ...current,
+      tone: item.tone,
+      // La planilla no es una opcion del selector: ahi el tipo no se toca.
+      textType: item.textType === "sheet" ? current.textType : item.textType,
+    }));
     setPrimaryAction(item.action);
     setStatus("done");
     setMobileView("output");
@@ -553,11 +688,20 @@ export function Workspace() {
     setHistory((current) => saveHistory(current.filter((item) => item.id !== id)));
   }, []);
 
+  /** Borra lo guardado de esta pestana y deja intacto lo de la otra. */
   const removeHistory = useCallback(() => {
-    clearStoredHistory();
-    setHistory([]);
-    toast("Historial eliminado");
-  }, [toast]);
+    setHistory((current) => {
+      const resto = current.filter((item) =>
+        esPlanilla ? item.textType !== "sheet" : item.textType === "sheet",
+      );
+      if (resto.length === 0) {
+        clearStoredHistory();
+        return [];
+      }
+      return saveHistory(resto);
+    });
+    toast(esPlanilla ? "Planillas guardadas eliminadas" : "Correos guardados eliminados");
+  }, [esPlanilla, toast]);
 
   // ----- atajos de teclado -----
   useEffect(() => {
@@ -595,6 +739,15 @@ export function Workspace() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [copyResult, output, primaryAction, run, settingsOpen, toast]);
 
+  /** Lo guardado de esta pestana: los correos y las planillas no se mezclan. */
+  const guardados = useMemo(
+    () =>
+      history.filter((item) =>
+        esPlanilla ? item.textType === "sheet" : item.textType !== "sheet",
+      ),
+    [esPlanilla, history],
+  );
+
   const busy = running !== null;
 
   return (
@@ -603,6 +756,8 @@ export function Workspace() {
 
       <main className="print-hidden relative z-10 mx-auto w-full max-w-[1400px] px-3 pb-[calc(3rem+env(safe-area-inset-bottom))] pt-4 sm:px-6 sm:pb-16 sm:pt-6">
         <div className="flex flex-col gap-3 sm:gap-4">
+          <SectionTabs value={seccion} onChange={cambiarSeccion} />
+
           <LanguageRoute
             source={lang}
             onSourceChange={(value) => {
@@ -620,11 +775,13 @@ export function Workspace() {
               setLangOverride(targetLang);
               updatePrefs({ targetLang: lang });
             }}
+            esPlanilla={esPlanilla}
           />
 
           <OptionsBar
             tone={prefs.tone}
             onToneChange={(tone: Tone) => updatePrefs({ tone })}
+            seccion={seccion}
             textType={prefs.textType}
             onTextTypeChange={(textType: TextType) => updatePrefs({ textType })}
             subject={subject}
@@ -699,6 +856,7 @@ export function Workspace() {
               onUndo={previousText !== null ? undoChain : undefined}
               onPaste={pasteFromClipboard}
               pasteEnabled={pasteEnabled}
+              esPlanilla={esPlanilla}
               textareaRef={textareaRef}
             />
 
@@ -713,6 +871,7 @@ export function Workspace() {
               onCopySigned={copySigned}
               table={table}
               canExportXlsx={tablaExcel !== null}
+              esPlanilla={esPlanilla}
               lang={outputLang}
               onDownloadDocx={() => void handleExport("docx")}
               onDownloadPdf={() => void handleExport("pdf")}
@@ -725,6 +884,7 @@ export function Workspace() {
 
           <div className="flex flex-col gap-2">
             <ActionsRow
+              actions={esPlanilla ? SHEET_ACTIONS : MAIN_ACTIONS}
               primary={primaryAction}
               running={running}
               disabled={busy}
@@ -743,14 +903,16 @@ export function Workspace() {
             </p>
           </div>
 
-          <QuickActions
-            running={running}
-            disabled={busy}
-            onRun={(action) => void run(action)}
-          />
+          {esPlanilla ? null : (
+            <QuickActions
+              running={running}
+              disabled={busy}
+              onRun={(action) => void run(action)}
+            />
+          )}
 
           <HistoryList
-            items={history}
+            items={guardados}
             onRestore={restore}
             onRemove={removeHistoryItem}
             onClear={removeHistory}

@@ -1,8 +1,8 @@
 import { SALIDA, URL_BASE, abrirNavegador, crearInforme, esperarResultado, leerResultado } from "./comun.mjs";
 
 /**
- * Correo, Reporte, Mensaje y Planilla, y que un tipo guardado que ya no
- * existe no rompa nada. Usa la IA una vez.
+ * Correo, Reporte y Mensaje (la Planilla vive en su propia pestana), y que un
+ * tipo guardado que ya no existe no rompa nada. Usa la IA una vez.
  */
 
 const informe = crearInforme("Tipos de texto");
@@ -17,24 +17,20 @@ await page.goto(URL_BASE, { waitUntil: "networkidle" });
 
 const options = await page.locator("select").nth(1).locator("option").allTextContents();
 console.log(`opciones: ${JSON.stringify(options)}`);
-informe.comprobar("el selector tiene 4 opciones", options.length === 4, `${options.length}`);
+informe.comprobar("el selector tiene 3 opciones", options.length === 3, `${options.length}`);
 informe.comprobar(
-  "son Correo, Reporte, Mensaje y Planilla",
-  JSON.stringify(options) === JSON.stringify(["Correo", "Reporte", "Mensaje", "Planilla"]),
+  "son Correo, Reporte y Mensaje",
+  JSON.stringify(options) === JSON.stringify(["Correo", "Reporte", "Mensaje"]),
+);
+informe.comprobar(
+  "la planilla no se mezcla con los tipos de correo",
+  !options.includes("Planilla"),
 );
 
 // Reporte sigue mostrando las fotos
 await page.locator("select").nth(1).selectOption("report");
 await page.waitForTimeout(300);
 informe.comprobar("Reporte sigue trayendo las fotos", await page.getByText("Fotos del reporte").isVisible());
-
-// Planilla explica que se puede pegar la tabla de Excel
-await page.locator("select").nth(1).selectOption("sheet");
-await page.waitForTimeout(300);
-informe.comprobar(
-  "Planilla explica que se pega la tabla",
-  await page.getByText(/Copia la tabla desde Excel/).isVisible(),
-);
 
 // Correo sigue mostrando el asunto
 await page.locator("select").nth(1).selectOption("email");
