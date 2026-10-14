@@ -3,9 +3,10 @@ import { URL_BASE, abrirNavegador, crearInforme } from "./comun.mjs";
 /**
  * Correos y planillas van separados.
  *
- * Son dos pestanas distintas: lo que se escribe en una no aparece en la otra,
- * cada una guarda su borrador, cada una enseña solo sus guardados y la
- * aplicacion vuelve a abrirse en la pestana en la que se quedo.
+ * Son dos mundos distintos: los correos tienen su caja de texto y sus
+ * guardados; las planillas, una cuadricula. Lo que se escribe en una no
+ * aparece en la otra, no se pierde al cambiar de pestana, y la aplicacion
+ * vuelve a abrirse donde se quedo.
  *
  * No usa la IA.
  */
@@ -28,23 +29,6 @@ const GUARDADOS = [
     textType: "email",
     tone: "professional",
     createdAt: Date.now(),
-  },
-  {
-    id: "planilla-1",
-    preview: "Night shift assignment sheet",
-    input: "planilla del turno",
-    output: "EMPLOYEE\tA/C\nJ. Pérez\tN123AV",
-    lang: "en",
-    action: "to_english",
-    textType: "sheet",
-    tone: "professional",
-    createdAt: Date.now() - 60000,
-    table: {
-      title: "Night shift assignment sheet",
-      meta: {},
-      columns: ["EMPLOYEE", "A/C"],
-      rows: [["J. Pérez", "N123AV"]],
-    },
   },
 ];
 
@@ -69,7 +53,7 @@ await caja.fill("quiero pedir permiso para el viernes");
 await page.waitForTimeout(600);
 
 informe.comprobar(
-  "en Correos solo se ve lo guardado de correos",
+  "en Correos se ve lo guardado",
   (await guardados().count()) === 1 &&
     (await guardados().first().innerText()).includes("repuesto"),
 );
@@ -78,31 +62,33 @@ await planillas.click();
 await page.waitForTimeout(400);
 
 informe.comprobar(
-  "al pasar a Planillas la caja está vacía",
-  (await caja.inputValue()) === "",
-  `"${await caja.inputValue()}"`,
+  "Planillas abre una cuadrícula, no una caja de texto",
+  (await page.locator('[role="grid"]').count()) > 0 && !(await caja.isVisible()),
 );
 informe.comprobar(
   "en Planillas no están los tipos de correo",
-  (await page.getByLabel("Tipo de texto").count()) === 0,
+  !(await page.getByLabel("Tipo de texto").isVisible()),
 );
 informe.comprobar(
   "ni las acciones rápidas de correo",
-  (await page.getByText("Acciones rápidas").count()) === 0,
+  !(await page.getByText("Acciones rápidas").first().isVisible()),
 );
 informe.comprobar(
-  "las acciones son Traducir y Organizar",
-  (await page.getByRole("button", { name: /Organizar/ }).count()) === 1 &&
-    (await page.getByRole("button", { name: /Generar correo/ }).count()) === 0,
+  "ni los guardados, que son de correos",
+  !(await guardados().first().isVisible()),
 );
 informe.comprobar(
-  "en Planillas solo se ven las planillas guardadas",
-  (await guardados().count()) === 1 &&
-    (await guardados().first().innerText()).includes("Night shift"),
+  "el botón principal es el de traducir y generar el Excel",
+  (await page.getByRole("button", { name: /Traducir y generar Excel/ }).isVisible()) &&
+    !(await page.getByRole("button", { name: /Generar correo/ }).first().isVisible()),
 );
 
-await caja.fill("EMPLEADO\tAVIÓN\nJ. Pérez\tN123AV");
-await page.waitForTimeout(600);
+// Se escribe en la cuadrícula para comprobar que sobrevive al cambio.
+const primeraCelda = page.locator('[role="grid"]').first().locator('[data-celda="0:0"]');
+await primeraCelda.click();
+await page.keyboard.type("L. Ríos");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(300);
 
 await correos.click();
 await page.waitForTimeout(400);
@@ -116,8 +102,8 @@ await planillas.click();
 await page.waitForTimeout(400);
 informe.comprobar(
   "y la planilla tampoco se perdió",
-  (await caja.inputValue()).startsWith("EMPLEADO"),
-  `"${await caja.inputValue()}"`,
+  (await primeraCelda.innerText()) === "L. Ríos",
+  await primeraCelda.innerText(),
 );
 
 // --- Al recargar se abre donde se quedó ---
@@ -129,8 +115,8 @@ informe.comprobar(
   (await page.getByRole("tab", { name: /Planillas/ }).getAttribute("aria-selected")) === "true",
 );
 informe.comprobar(
-  "con su borrador intacto",
-  (await page.locator("#paula-input").inputValue()).startsWith("EMPLEADO"),
+  "con la cuadrícula lista",
+  (await page.locator('[role="grid"]').count()) > 0,
 );
 
 await page.getByRole("tab", { name: /Correos/ }).click();

@@ -26,6 +26,9 @@
   --cloud: rgb(95 168 255 / 0.07);
   --success: #3ec98d;
   --danger: #ff8078;
+  /* Aviso: la planilla traducida ya no corresponde a lo que hay escrito. */
+  --warning: #f0b34a;
+  --warning-soft: #32250d;
   --shadow-panel: 0 1px 1px rgb(0 0 0 / 0.5), 0 2px 8px -3px rgb(0 0 0 / 0.5),
     0 16px 36px -18px rgb(0 0 0 / 0.7);
 }
@@ -45,6 +48,8 @@
   --color-accent-ink: var(--accent-ink);
   --color-success: var(--success);
   --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: var(--font-serif), ui-serif, Georgia, serif;
   --shadow-panel: var(--shadow-panel);
@@ -514,6 +519,15 @@
     font-size: 9.5pt;
     font-weight: 700;
     color: #44546a;
+  }
+
+  .print-sheet .print-bloque {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    font-weight: 700;
+    color: #1f3864;
+    letter-spacing: 0.06em;
+    margin: 14pt 0 5pt;
   }
 
   .print-sheet .print-table {

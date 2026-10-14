@@ -48,28 +48,14 @@ export const TONES: { id: Tone; label: string }[] = [
   { id: "concise", label: "Corto y directo" },
 ];
 
-/** Catalogo completo, incluida la planilla (que vive en su propia pestana). */
+/**
+ * Tipos del selector "Tipo de texto".
+ * La planilla no esta: es una hoja de calculo y vive en su propia pestana.
+ */
 export const TEXT_TYPES: { id: TextType; label: string }[] = [
   { id: "email", label: "Correo" },
   { id: "report", label: "Reporte" },
   { id: "message", label: "Mensaje" },
-  { id: "sheet", label: "Planilla" },
-];
-
-/**
- * Los que salen en el selector "Tipo de texto".
- * La planilla no esta: tiene su propia pestana para no mezclarla con los
- * correos.
- */
-export const TIPOS_DE_CORREO = TEXT_TYPES.filter((tipo) => tipo.id !== "sheet");
-
-/**
- * Acciones de la pestana de planillas.
- * Ni "Mejorar" ni "Generar correo" pintan nada en una tabla de datos.
- */
-export const SHEET_ACTIONS: ActionMeta[] = [
-  { id: "translate", label: "Traducir", hint: "Pasa la planilla al otro idioma" },
-  { id: "correct", label: "Organizar", hint: "Ordena la tabla y corrige el texto" },
 ];
 
 export const ALL_ACTIONS = Object.keys(ACTION_LABELS) as Action[];

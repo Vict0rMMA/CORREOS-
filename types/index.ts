@@ -17,27 +17,40 @@ export type TextType = "email" | "report" | "message" | "sheet";
  */
 export type Seccion = "correos" | "planillas";
 
-/**
- * Como tiene que venir la respuesta del modelo.
- * "table" solo lo usa la planilla: en vez de texto corrido devuelve el JSON
- * de la tabla, que es lo que luego se vuelca a Excel, Word o PDF.
- */
-export type ResponseFormat = "text" | "table";
-
 /** Datos de cabecera de una planilla (los que van sobre la tabla). */
-export interface TableMeta {
-  date?: string;
-  shift?: string;
-  supervisor?: string;
+export interface SheetMeta {
+  date: string;
+  shift: string;
+  supervisor: string;
 }
 
-/** Una planilla ya resuelta: lo que se descarga como Excel. */
-export interface TableData {
+/**
+ * Un bloque de la planilla. Casi todas tienen uno solo; la de turnos
+ * nocturnos lleva ademas el personal del dia, las horas extra y los vehiculos.
+ */
+export interface SheetSection {
+  /** Encabezado del bloque; vacio en la tabla principal. */
   title: string;
-  meta: TableMeta;
   columns: string[];
   rows: string[][];
+}
+
+export type SheetTemplateId = "terminal" | "hangar" | "nights" | "custom";
+
+/** Una planilla entera: lo que se edita en la cuadricula y lo que se exporta. */
+export interface SheetDoc {
+  template: SheetTemplateId;
+  title: string;
+  meta: SheetMeta;
+  sections: SheetSection[];
+  /** Notas libres bajo la tabla. */
   notes?: string;
+}
+
+/** Celda suelta que se manda a traducir, con su identificador estable. */
+export interface SheetCell {
+  id: string;
+  text: string;
 }
 
 /** Firma escaneada, recortada y con el fondo quitado. */
@@ -82,13 +95,6 @@ export interface ProcessRequest {
   textType: TextType;
   subject?: string;
   signature?: string;
-  /** Por defecto "text"; la planilla pide "table". */
-  format?: ResponseFormat;
-}
-
-/** Respuesta de /api/process cuando se pidio una tabla. */
-export interface TableResponse {
-  table: TableData;
 }
 
 /** Cuerpo de la peticion a /api/subject. */
@@ -115,8 +121,6 @@ export interface HistoryItem {
   textType: TextType;
   tone: Tone;
   createdAt: number;
-  /** Planilla resuelta, cuando el texto se proceso como tabla. */
-  table?: TableData;
 }
 
 export interface Prefs {

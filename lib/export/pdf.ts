@@ -9,8 +9,9 @@ import { documentFooter, parseSignature, splitClosing } from "@/lib/export/layou
 import { cargarLogo, medidaLogo } from "@/lib/export/logo";
 import { fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
+import { paraExportar } from "@/lib/planilla";
 import type { ExportPayload } from "@/lib/export/docx";
-import type { TableData } from "@/types";
+import type { SheetSection } from "@/types";
 
 const MARGIN = 64;
 /** A4 en puntos. En la planilla se usa apaisado y se intercambian. */
@@ -43,7 +44,7 @@ export async function downloadPdf({
   body,
   lang,
   images = [],
-  table = null,
+  sheet = null,
   signature = "",
   signatureImage = null,
   includeLogo = true,
@@ -57,7 +58,7 @@ export async function downloadPdf({
     : { body, closing: null };
 
   // La planilla se lee mejor apaisada.
-  const apaisado = table !== null;
+  const apaisado = sheet !== null;
   const doc = new jsPDF({
     unit: "pt",
     format: "a4",
@@ -120,12 +121,13 @@ export async function downloadPdf({
     y += LINE_HEIGHT * subjectLines.length + 14;
   }
 
-  if (table) {
+  if (sheet) {
     // --- Planilla ---
+    const planilla = paraExportar(sheet);
     const datos = [
-      table.meta.date && `${textos.date}: ${table.meta.date}`,
-      table.meta.shift && `${textos.shift}: ${table.meta.shift}`,
-      table.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+      planilla.meta.date && `${textos.date}: ${planilla.meta.date}`,
+      planilla.meta.shift && `${textos.shift}: ${planilla.meta.shift}`,
+      planilla.meta.supervisor && `${textos.supervisor}: ${planilla.meta.supervisor}`,
     ].filter(Boolean) as string[];
 
     if (datos.length > 0) {
@@ -137,24 +139,42 @@ export async function downloadPdf({
       y += 20;
     }
 
-    y = dibujarTabla(doc, table, {
-      x: MARGIN,
-      y,
-      width: maxWidth,
-      bottom,
-      onNewPage: () => {
-        doc.addPage();
-        return MARGIN;
-      },
+    planilla.sections.forEach((bloque, indice) => {
+      if (bloque.title) {
+        ensure(26);
+        y += indice === 0 ? 0 : 14;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(AZUL[0], AZUL[1], AZUL[2]);
+        doc.setCharSpace(0.8);
+        doc.text(bloque.title, MARGIN, y);
+        doc.setCharSpace(0);
+        doc.setTextColor(0);
+        y += 12;
+      }
+
+      y = dibujarTabla(doc, bloque, {
+        x: MARGIN,
+        y,
+        width: maxWidth,
+        bottom,
+        onNewPage: () => {
+          doc.addPage();
+          return MARGIN;
+        },
+      });
     });
 
-    if (table.notes) {
+    if (planilla.notes) {
       ensure(30);
       y += 10;
       doc.setFont("helvetica", "italic");
       doc.setFontSize(9);
       doc.setTextColor(GREY);
-      const notas = doc.splitTextToSize(`${textos.notes}: ${table.notes}`, maxWidth) as string[];
+      const notas = doc.splitTextToSize(
+        `${textos.notes}: ${planilla.notes}`,
+        maxWidth,
+      ) as string[];
       for (const linea of notas) {
         ensure(12);
         doc.text(linea, MARGIN, y);
@@ -295,8 +315,8 @@ export async function downloadPdf({
   }
 
   doc.setProperties({ title: subject || title, creator: firma?.name ?? "" });
-  const nombre = table
-    ? `${slugify(table.title, documentTitle("sheet", lang))}-${isoDate()}`
+  const nombre = sheet
+    ? `${slugify(sheet.title, documentTitle("sheet", lang))}-${isoDate()}`
     : slugify(subject || title);
   downloadBlob(doc.output("blob"), `${nombre}.pdf`);
 }
@@ -309,7 +329,7 @@ export async function downloadPdf({
  */
 function dibujarTabla(
   doc: import("jspdf").jsPDF,
-  table: TableData,
+  table: SheetSection,
   caja: {
     x: number;
     y: number;

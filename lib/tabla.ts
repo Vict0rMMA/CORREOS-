@@ -1,13 +1,14 @@
 import { labels } from "@/lib/export/i18n";
-import type { Lang, TableData, TableMeta } from "@/types";
+import { paraExportar } from "@/lib/planilla";
+import type { Lang, SheetDoc, SheetSection } from "@/types";
 
 /**
- * Planillas: leer una tabla pegada, traducir sus encabezados sin IA y
- * comprobar que lo que devuelve el modelo sigue siendo el mismo dato.
+ * Lo que hace falta para pasar una planilla al ingles sin estropear los datos.
  *
  * La regla de la casa: una matricula, una hora o un numero no se traducen
  * NUNCA. Se copian tal cual y despues se comprueba que siguen ahi. Si algo no
- * cuadra se avisa; no se entrega una planilla con los datos cambiados.
+ * cuadra se avisa senalando la celda; no se entrega una planilla con los datos
+ * cambiados.
  */
 
 /** Quita acentos y deja el texto comparable. */
@@ -19,7 +20,7 @@ function simple(value: string): string {
     .trim();
 }
 
-/** Clave con la que se busca un encabezado en el mapa. */
+/** Clave con la que se busca en los mapas. */
 function clave(value: string): string {
   return simple(value)
     .replace(/[^a-z0-9@/#]+/g, " ")
@@ -27,10 +28,13 @@ function clave(value: string): string {
     .trim();
 }
 
+// ---------------------------------------------------------------------------
+// Encabezados: traduccion fija, sin IA
+// ---------------------------------------------------------------------------
+
 /**
- * Encabezados de la plantilla de AVX, traducidos sin pasar por la IA.
- * Son los nombres que usa el equipo; cualquier otra columna la traduce el
- * modelo.
+ * Encabezados de las plantillas de AVX, tal y como aparecen en el modelo.
+ * Cualquier columna que no este aqui la traduce el modelo.
  */
 const ENCABEZADOS: Array<[string, string]> = [
   ["empleado", "EMPLOYEE"],
@@ -38,23 +42,36 @@ const ENCABEZADOS: Array<[string, string]> = [
   ["estado", "STATUS"],
   ["avion", "A/C"],
   ["aeronave", "A/C"],
+  ["avion 2", "A/C 2"],
   ["puerta", "GATE"],
+  ["puerta 2", "GATE 2"],
   ["hora asignado", "ASSGN @"],
   ["hora asignada", "ASSGN @"],
   ["hora salida", "ETD"],
   ["hora de salida", "ETD"],
   ["estacion", "STA"],
-  ["tripulacion", "CRW"],
+  ["tripulacion", "CREW"],
   ["tecnico avx", "AVX TECH"],
   ["falla diferida", "MEL/NEF"],
+  ["n empleado", "EMP #"],
+  ["no empleado", "EMP #"],
+  ["numero de empleado", "EMP #"],
   ["fecha", "DATE"],
   ["turno", "SHIFT"],
   ["supervisor", "SUPERVISOR"],
   ["notas", "NOTES"],
+  ["tipo", "TYPE"],
+  ["nombre", "NAME"],
+  ["presente", "PRESENT"],
+  ["unidad", "UNIT"],
+  ["conductor", "DRIVER"],
+  ["personal del dia", "DAILY MANNING"],
+  ["horas extra y disponibles", "O/T & STANDBY"],
+  ["vehiculos", "VEHICLE LIST"],
 ];
 
 const A_INGLES = new Map(ENCABEZADOS);
-/** El mismo mapa al reves, para cuando la planilla sale en espanol. */
+/** El mismo mapa al reves, para cuando la planilla vuelve al espanol. */
 const A_ESPANOL = new Map(
   ENCABEZADOS.map(([es, en]) => [clave(en), es.toUpperCase()] as [string, string]),
 );
@@ -79,6 +96,58 @@ export function traducirEncabezado(nombre: string, destino: Lang): string | null
   return A_INGLES.has(llave) ? nombre.toUpperCase() : null;
 }
 
+/**
+ * Valores de siempre: estados, tipos y respuestas que se repiten en cada
+ * planilla. Tambien se resuelven sin IA, asi son iguales todos los dias.
+ */
+const VALORES: Array<[string, string]> = [
+  ["presente", "PRESENT"],
+  ["ausente", "ABSENT"],
+  ["vacaciones", "VACATION"],
+  ["incapacidad", "SICK LEAVE"],
+  ["descanso", "DAY OFF"],
+  ["permiso", "LEAVE"],
+  ["capacitacion", "TRAINING"],
+  ["entrenamiento", "TRAINING"],
+  ["si", "YES"],
+  ["no", "NO"],
+  ["hora extra", "OVERTIME"],
+  ["horas extra", "OVERTIME"],
+  ["disponible", "STANDBY"],
+  ["dia", "DAY"],
+  ["noche", "NIGHT"],
+  ["tarde", "AFTERNOON"],
+  ["manana", "MORNING"],
+  ["madrugada", "EARLY MORNING"],
+  ["fin de semana", "WEEKEND"],
+  ["entrada", "INBOUND"],
+  ["llegada", "INBOUND"],
+  ["salida", "OUTBOUND"],
+  ["doble cabina", "DUAL CB"],
+  ["sencillo", "SINGLE"],
+];
+
+const VALOR_A_INGLES = new Map(VALORES);
+const VALOR_A_ESPANOL = new Map(
+  VALORES.map(([es, en]) => [clave(en), es.toUpperCase()] as [string, string]),
+);
+
+/** Traduce un valor de los de siempre. null si no es uno de ellos. */
+export function traducirValor(valor: string, destino: Lang): string | null {
+  const llave = clave(valor);
+  if (!llave) return null;
+
+  if (destino === "en") {
+    const directo = VALOR_A_INGLES.get(llave);
+    if (directo) return directo;
+    return VALOR_A_ESPANOL.has(llave) ? valor.toUpperCase() : null;
+  }
+
+  const directo = VALOR_A_ESPANOL.get(llave);
+  if (directo) return directo;
+  return VALOR_A_INGLES.has(llave) ? valor.toUpperCase() : null;
+}
+
 // ---------------------------------------------------------------------------
 // Celdas: que es dato y que es texto
 // ---------------------------------------------------------------------------
@@ -86,14 +155,26 @@ export function traducirEncabezado(nombre: string, destino: Lang): string | null
 const HORA = /^\d{1,2}:\d{2}(?::\d{2})?$/;
 const NUMERO = /^[+-]?\d+(?:[.,]\d+)*\s*%?$/;
 const FECHA = /^\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?$/;
-/** Codigo: sin minusculas (N123AV, B4, MEL-21, P-0, A/C). */
-const CODIGO = /^[A-Z0-9][A-Z0-9@#/.-]*$/;
+
+/**
+ * Codigo operativo: en mayusculas y, ademas, con alguna marca de codigo
+ * (lleva un numero, un separador, o es una sigla corta).
+ *
+ * Sin esa segunda condicion una palabra como PRESENTE o VACACIONES pasaria
+ * por codigo y se quedaria en espanol dentro de una planilla en ingles.
+ */
+export function esCodigo(valor: string): boolean {
+  const texto = valor.trim();
+  if (!texto || /[a-zà-ÿ]/.test(texto)) return false;
+  if (!/^[A-Z0-9][A-Z0-9@#/.\- ]*$/.test(texto)) return false;
+  return /\d/.test(texto) || /[/\-#@]/.test(texto) || texto.replace(/\s/g, "").length <= 4;
+}
 
 /** true si la celda es un dato que se copia tal cual, sin pasar por la IA. */
 export function esDato(valor: string): boolean {
   const texto = valor.trim();
   if (!texto) return true;
-  return HORA.test(texto) || NUMERO.test(texto) || FECHA.test(texto) || CODIGO.test(texto);
+  return HORA.test(texto) || NUMERO.test(texto) || FECHA.test(texto) || esCodigo(texto);
 }
 
 /**
@@ -106,103 +187,18 @@ export function pareceNombre(valor: string): boolean {
   return palabras.every((palabra) => /^\p{Lu}[\p{L}'’-]*\.?$/u.test(palabra));
 }
 
-/** true si la celda tiene texto de verdad y hay que traducirla. */
-export function necesitaTraduccion(valor: string): boolean {
-  return !esDato(valor) && !pareceNombre(valor);
-}
-
-// ---------------------------------------------------------------------------
-// Leer una tabla pegada desde Excel (celdas separadas por tabuladores)
-// ---------------------------------------------------------------------------
-
-export interface TablaLeida {
-  /** Primera linea suelta sobre la tabla, si la hay. */
-  title: string;
-  meta: TableMeta;
-  columns: string[];
-  rows: string[][];
-  /** Lineas sueltas bajo la tabla, que acaban como notas. */
-  notes: string;
-}
-
-/** true si el texto trae una tabla pegada (al menos dos filas con tabulador). */
-export function pareceTabla(texto: string): boolean {
-  const conTabulador = texto
-    .split(/\r?\n/)
-    .filter((linea) => linea.includes("\t") && linea.trim());
-  return conTabulador.length >= 2;
-}
-
-/** Datos de cabecera sueltos sobre la tabla: "FECHA: 12/03/2026". */
-const META: Array<[RegExp, keyof TableMeta]> = [
-  [/^(fecha|date)$/, "date"],
-  [/^(turno|shift)$/, "shift"],
-  [/^(supervisor|jefe de turno)$/, "supervisor"],
-];
-
-function leerMeta(linea: string, meta: TableMeta): boolean {
-  const corte = linea.indexOf(":");
-  if (corte < 1) return false;
-  const nombre = simple(linea.slice(0, corte));
-  const valor = linea.slice(corte + 1).trim();
-  if (!valor) return false;
-
-  for (const [patron, campo] of META) {
-    if (patron.test(nombre)) {
-      meta[campo] = valor;
-      return true;
-    }
-  }
-  return false;
-}
-
 /**
- * Lee una tabla pegada. La primera fila con tabuladores son los encabezados;
- * lo de arriba se mira por si trae fecha, turno o supervisor, y lo de abajo
- * sin tabuladores se guarda como notas.
+ * true si la celda tiene texto de verdad y hay que mandarla al modelo.
+ * Antes se mira si es un dato, un nombre o uno de los valores de siempre.
  */
-export function leerTsv(texto: string): TablaLeida | null {
-  const lineas = texto.replace(/\r\n/g, "\n").split("\n");
-  const meta: TableMeta = {};
-  const notas: string[] = [];
-
-  let title = "";
-  let columns: string[] | null = null;
-  const rows: string[][] = [];
-
-  for (const linea of lineas) {
-    if (!linea.trim()) continue;
-
-    if (linea.includes("\t")) {
-      const celdas = linea.split("\t").map((celda) => celda.trim());
-      if (celdas.every((celda) => !celda)) continue;
-      if (!columns) columns = celdas;
-      else rows.push(celdas);
-      continue;
-    }
-
-    // Fuera de la tabla: dato de cabecera, titulo o nota.
-    if (leerMeta(linea, meta)) continue;
-    if (!columns && !title) title = linea.trim();
-    else notas.push(linea.trim());
-  }
-
-  if (!columns || rows.length === 0) return null;
-
-  // Las filas se cuadran al numero de columnas: al copiar desde Excel sobran
-  // o faltan celdas vacias al final.
-  const ancho = columns.length;
-  const cuadradas = rows.map((fila) => {
-    const copia = fila.slice(0, ancho);
-    while (copia.length < ancho) copia.push("");
-    return copia;
-  });
-
-  return { title, meta, columns, rows: cuadradas, notes: notas.join(" ") };
+export function necesitaTraduccion(valor: string, destino: Lang): boolean {
+  if (esDato(valor)) return false;
+  if (traducirValor(valor, destino)) return false;
+  return !pareceNombre(valor);
 }
 
 // ---------------------------------------------------------------------------
-// Validacion de lo que devuelve el modelo
+// Validacion
 // ---------------------------------------------------------------------------
 
 /**
@@ -256,11 +252,13 @@ const PALABRAS_ES = new Set([
   "solicita", "solicito", "informa", "informo", "requiere", "aprobada", "aprobado",
   "cambio", "reemplazo", "trabajo", "trabajos", "estacion", "tripulacion",
   "noche", "dia", "dias", "manana", "tarde", "madrugada", "semana", "mes",
+  "presente", "ausente", "vacaciones", "incapacidad", "descanso", "permiso",
+  "programado", "programada", "vehiculo", "vehiculos", "conductor", "unidad",
 ]);
 
 /**
- * Lista de lo que quedo en espanol dentro de un resultado que deberia estar en
- * ingles. Vacia significa que la traduccion esta completa.
+ * Lo que quedo en espanol dentro de un texto que deberia estar en ingles.
+ * Vacio significa que la traduccion esta completa.
  *
  * Aqui no se usa detectLanguage a proposito: cuenta tildes, y una planilla es
  * casi toda codigos y apellidos ("J. Perez", "N123AV"), asi que daba por
@@ -288,73 +286,156 @@ export function restosEnEspanol(salida: string, destino: Lang): string[] {
   return [...restos];
 }
 
-// ---------------------------------------------------------------------------
-// Forma de la tabla
-// ---------------------------------------------------------------------------
-
-export interface RevisionTabla {
-  table: TableData | null;
-  /** Lo que no cuadra, en palabras que se le pueden ensenar a la persona. */
-  problemas: string[];
+/** Un problema concreto, con la celda a la que hay que ir. */
+export interface Aviso {
+  /** Indice del bloque dentro de la planilla. */
+  section: number;
+  /** Fila de datos, o -1 si el problema esta en el encabezado. */
+  row: number;
+  column: number;
+  /** Nombre de la columna, para poder decirlo con palabras. */
+  columnLabel: string;
+  message: string;
 }
 
-/** Comprueba y cuadra lo que devolvio el modelo. */
-export function normalizarTabla(crudo: unknown): RevisionTabla {
-  const problemas: string[] = [];
-  if (typeof crudo !== "object" || crudo === null) {
-    return { table: null, problemas: ["la respuesta no es una tabla"] };
+/**
+ * Revisa la planilla traducida contra la original, celda por celda.
+ *
+ * Comprueba la estructura (mismas filas, mismas columnas, celdas en su sitio),
+ * los datos protegidos (que no haya desaparecido ningun codigo, hora o
+ * numero) y que no quede espanol donde deberia haber ingles.
+ */
+export function revisarPlanilla(
+  origen: SheetDoc,
+  salida: SheetDoc,
+  destino: Lang,
+): Aviso[] {
+  const avisos: Aviso[] = [];
+
+  if (origen.sections.length !== salida.sections.length) {
+    avisos.push({
+      section: 0,
+      row: -1,
+      column: 0,
+      columnLabel: "",
+      message: `la planilla tenía ${origen.sections.length} bloque(s) y volvió con ${salida.sections.length}`,
+    });
+    return avisos;
   }
 
-  const datos = crudo as Record<string, unknown>;
-  const columns = Array.isArray(datos.columns)
-    ? datos.columns.map((columna) => String(columna ?? "").trim()).filter(Boolean)
-    : [];
-  if (columns.length === 0) {
-    return { table: null, problemas: ["la tabla llego sin columnas"] };
-  }
+  origen.sections.forEach((bloque, indiceBloque) => {
+    const traducido = salida.sections[indiceBloque];
+    const nombre = (columna: number) =>
+      traducido.columns[columna] ?? bloque.columns[columna] ?? `columna ${columna + 1}`;
 
-  const filas = Array.isArray(datos.rows) ? datos.rows : [];
-  const rows: string[][] = [];
-  filas.forEach((fila, indice) => {
-    if (!Array.isArray(fila)) {
-      problemas.push(`la fila ${indice + 1} no es una fila`);
+    if (traducido.columns.length !== bloque.columns.length) {
+      avisos.push({
+        section: indiceBloque,
+        row: -1,
+        column: 0,
+        columnLabel: "",
+        message: `el bloque tenía ${bloque.columns.length} columnas y volvió con ${traducido.columns.length}`,
+      });
       return;
     }
-    const celdas = fila.map((celda) => String(celda ?? ""));
-    if (celdas.length > columns.length) {
-      problemas.push(
-        `la fila ${indice + 1} trae ${celdas.length} celdas y hay ${columns.length} columnas`,
-      );
+
+    if (traducido.rows.length !== bloque.rows.length) {
+      avisos.push({
+        section: indiceBloque,
+        row: -1,
+        column: 0,
+        columnLabel: "",
+        message: `el bloque tenía ${bloque.rows.length} filas y volvió con ${traducido.rows.length}`,
+      });
       return;
     }
-    while (celdas.length < columns.length) celdas.push("");
-    rows.push(celdas);
+
+    traducido.columns.forEach((columna, indiceColumna) => {
+      const restos = restosEnEspanol(columna, destino);
+      if (restos.length > 0) {
+        avisos.push({
+          section: indiceBloque,
+          row: -1,
+          column: indiceColumna,
+          columnLabel: columna,
+          message: `el encabezado quedó en español: ${restos.join(", ")}`,
+        });
+      }
+    });
+
+    bloque.rows.forEach((fila, indiceFila) => {
+      const filaTraducida = traducido.rows[indiceFila] ?? [];
+
+      fila.forEach((celda, indiceColumna) => {
+        const resultado = filaTraducida[indiceColumna] ?? "";
+        const original = celda.trim();
+
+        if (!original && resultado.trim()) {
+          avisos.push({
+            section: indiceBloque,
+            row: indiceFila,
+            column: indiceColumna,
+            columnLabel: nombre(indiceColumna),
+            message: "la celda estaba vacía y volvió con texto",
+          });
+          return;
+        }
+
+        if (original && !resultado.trim()) {
+          avisos.push({
+            section: indiceBloque,
+            row: indiceFila,
+            column: indiceColumna,
+            columnLabel: nombre(indiceColumna),
+            message: `se perdió el contenido "${original}"`,
+          });
+          return;
+        }
+
+        // Un dato protegido tiene que volver exactamente igual.
+        if (esDato(original) && original !== resultado.trim()) {
+          avisos.push({
+            section: indiceBloque,
+            row: indiceFila,
+            column: indiceColumna,
+            columnLabel: nombre(indiceColumna),
+            message: `"${original}" cambió a "${resultado.trim()}"`,
+          });
+          return;
+        }
+
+        const perdidos = tokensPerdidos(original, resultado);
+        if (perdidos.length > 0) {
+          avisos.push({
+            section: indiceBloque,
+            row: indiceFila,
+            column: indiceColumna,
+            columnLabel: nombre(indiceColumna),
+            message: `falta ${perdidos.join(", ")} en "${resultado.trim()}"`,
+          });
+          return;
+        }
+
+        const restos = restosEnEspanol(resultado, destino);
+        if (restos.length > 0) {
+          avisos.push({
+            section: indiceBloque,
+            row: indiceFila,
+            column: indiceColumna,
+            columnLabel: nombre(indiceColumna),
+            message: `quedó en español: ${restos.join(", ")}`,
+          });
+        }
+      });
+    });
   });
 
-  const meta = (
-    typeof datos.meta === "object" && datos.meta !== null ? datos.meta : {}
-  ) as Record<string, unknown>;
-
-  const texto = (valor: unknown) => {
-    const limpio = typeof valor === "string" ? valor.trim() : "";
-    return limpio || undefined;
-  };
-
-  return {
-    table: {
-      title: typeof datos.title === "string" ? datos.title.trim() : "",
-      meta: {
-        date: texto(meta.date),
-        shift: texto(meta.shift),
-        supervisor: texto(meta.supervisor),
-      },
-      columns,
-      rows,
-      notes: texto(datos.notes),
-    },
-    problemas,
-  };
+  return avisos;
 }
+
+// ---------------------------------------------------------------------------
+// Utilidades de salida
+// ---------------------------------------------------------------------------
 
 /** Nombre de hoja valido para Excel: sin : \ / ? * [ ] y hasta 31 caracteres. */
 export function nombreDeHoja(titulo: string, porDefecto = "Sheet"): string {
@@ -368,43 +449,43 @@ export function nombreDeHoja(titulo: string, porDefecto = "Sheet"): string {
 }
 
 /**
- * La tabla en texto plano, separada por tabuladores.
+ * La planilla en texto plano, separada por tabuladores.
  * Es lo que se copia al portapapeles: asi se pega en Excel o en el correo y
  * sigue siendo una tabla.
  */
-export function tablaATexto(table: TableData, lang: Lang = "es"): string {
+export function planillaATexto(doc: SheetDoc, lang: Lang): string {
   const textos = labels(lang);
   const partes: string[] = [];
-  if (table.title) partes.push(table.title);
+  if (doc.title) partes.push(doc.title);
+  if (doc.meta.date) partes.push(`${textos.date}: ${doc.meta.date}`);
+  if (doc.meta.shift) partes.push(`${textos.shift}: ${doc.meta.shift}`);
+  if (doc.meta.supervisor) partes.push(`${textos.supervisor}: ${doc.meta.supervisor}`);
 
-  // Con la etiqueta delante, el texto se vuelve a leer como tabla si se
-  // encadena otra accion encima del resultado.
-  if (table.meta.date) partes.push(`${textos.date}: ${table.meta.date}`);
-  if (table.meta.shift) partes.push(`${textos.shift}: ${table.meta.shift}`);
-  if (table.meta.supervisor) partes.push(`${textos.supervisor}: ${table.meta.supervisor}`);
-  if (partes.length > 0) partes.push("");
-
-  partes.push(table.columns.join("\t"));
-  for (const fila of table.rows) partes.push(fila.join("\t"));
-  if (table.notes) {
+  for (const bloque of paraExportar(doc).sections) {
     partes.push("");
-    partes.push(table.notes);
+    if (bloque.title) partes.push(bloque.title);
+    partes.push(bloque.columns.join("\t"));
+    for (const fila of bloque.rows) partes.push(fila.join("\t"));
   }
 
-  return partes.join("\n");
+  if (doc.notes) {
+    partes.push("");
+    partes.push(doc.notes);
+  }
+
+  return partes.join("\n").trim();
 }
 
 /**
- * Convierte un texto en la tabla minima "#, Descripcion": un parrafo por fila.
- *
- * Es lo que permite bajar un reporte a Excel sin volver a llamar a la IA: el
- * texto ya esta escrito, aqui solo se numera.
+ * Convierte un texto en una planilla de dos columnas, "#" y "Descripcion",
+ * con un parrafo por fila. Es lo que permite bajar un reporte a Excel sin
+ * volver a llamar a la IA.
  */
-export function tablaDeParrafos(
+export function planillaDeParrafos(
   cuerpo: string,
   lang: Lang,
   titulo: string,
-): TableData | null {
+): SheetDoc | null {
   const parrafos = cuerpo
     .replace(/\r\n/g, "\n")
     .split(/\n\s*\n|\n/)
@@ -414,10 +495,16 @@ export function tablaDeParrafos(
   if (parrafos.length === 0) return null;
 
   const textos = labels(lang);
-  return {
-    title: titulo,
-    meta: {},
+  const seccion: SheetSection = {
+    title: "",
     columns: [textos.number, textos.description],
     rows: parrafos.map((parrafo, indice) => [String(indice + 1), parrafo]),
+  };
+
+  return {
+    template: "custom",
+    title: titulo,
+    meta: { date: "", shift: "", supervisor: "" },
+    sections: [seccion],
   };
 }

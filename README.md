@@ -6,14 +6,15 @@ descargar en Word, PDF o Excel, o imprimir.
 
 - **Dictado por voz**: hablas y el texto se escribe solo, en vivo.
 - **Reportes con fotos**: adjunta imagenes con pie de foto y salen en el Word, el PDF y la impresion.
-- **Planillas a Excel**: pegas la tabla del turno y sale un `.xlsx` con el logo de
+- **Planillas a Excel**: una cuadricula como la de Excel donde escribes el turno
+  en espanol; un boton la pasa al ingles y descarga un `.xlsx` con el logo de
   American Airlines, listo para imprimir. Las matriculas, las horas y los codigos
   se conservan exactos.
 - Correccion de ortografia, gramatica, puntuacion y redaccion.
 - Traduccion natural (no literal) espanol <-> ingles.
 - Mejora de redaccion conservando la intencion original.
 - Generacion de correos completos a partir de una idea corta.
-- Seis tonos y cuatro tipos de texto: correo, reporte, mensaje y planilla.
+- Seis tonos y tres tipos de texto: correo, reporte y mensaje.
 - Sugerencia de asuntos para correos.
 - Acciones rapidas de un clic, historial local y atajos de teclado.
 - Interfaz oscura, disenada para movil, tablet y escritorio.
@@ -247,51 +248,91 @@ Elige **Reporte** en *Tipo de texto* y aparece el bloque de fotos:
 - Se quedan en la pestana mientras trabajas; **no se guardan** al cerrar la pagina
   (el historial local solo guarda texto).
 
-## Planillas y Excel
+## Planillas: una hoja de calculo de verdad
 
-Elige **Planilla** en *Tipo de texto* cuando lo que tienes es una tabla:
-asignaciones del turno, novedades, control de aeronaves.
+La pestana **Planillas** no es una caja de texto: es una **cuadricula editable**,
+como Excel. Se trabaja en espanol, y cuando la planilla esta lista un boton la
+pasa al ingles y deja el `.xlsx` listo para descargar.
 
-Copia la tabla desde Excel y pegala tal cual. La aplicacion la lee en el
-navegador y **solo manda a la IA las celdas con texto de verdad**:
+### La cuadricula
 
-- Las **matriculas, puertas, horas, fechas, numeros y codigos** (`N123AV`, `B4`,
-  `07:30`, `MEL-21`, `P-0`) no pasan por la IA: se copian caracter a caracter.
-- Los **nombres de persona** tampoco: `J. Perez` sale igual, con su tilde.
-- Los **encabezados conocidos** se traducen con una tabla fija, sin IA:
-  EMPLEADO -> EMPLOYEE, ALMUERZO -> LUNCH, AVION -> A/C, PUERTA -> GATE,
-  HORA ASIGNADO -> ASSGN @, HORA SALIDA -> ETD, ESTACION -> STA,
-  TRIPULACION -> CRW, TECNICO AVX -> AVX TECH, FALLA DIFERIDA -> MEL/NEF,
-  FECHA -> DATE, TURNO -> SHIFT, NOTAS -> NOTES. El mapa esta en `lib/tabla.ts`
-  y se amplia anadiendo una linea.
-- Si la tabla no trae ni una celda de texto, **no se llama a la IA**: la
-  respuesta tarda unos 30 ms.
+- Se escribe directamente en las celdas (doble clic, Enter o empezar a teclear).
+- Se navega con las **flechas**, con **Tab** y **Mayus+Tab**, con Inicio y Fin.
+- **Ctrl+C** copia el rango seleccionado con tabuladores y **Ctrl+V** pega un
+  bloque entero copiado de Excel. Si lo pegado no cabe, la cuadricula **crece**:
+  nunca se pierde una fila.
+- **Supr** vacia las celdas sin tocar la estructura.
+- Se anaden y se quitan filas y columnas, se cambian los encabezados y se
+  arrastra el borde de una columna para darle mas ancho.
+- **Ctrl+Z** y **Ctrl+Shift+Z** deshacen y rehacen (hasta 60 pasos).
 
-Tambien sirve escribir el turno a mano: si el texto no es una tabla, el modelo
-lo organiza en columnas (y si no hay nada que tabular, usa `#` y `Description`).
+### Las plantillas
 
-### Antes de entregar nada, se revisa
+Salen del archivo real de AVX (`MODELO_TABLAS_SALIDA_EN.xlsx`), cada una con
+sus propias columnas:
 
-Cada respuesta pasa por un control antes de llegar a la pantalla:
+| Plantilla | Columnas |
+| --- | --- |
+| **Terminal** | EMPLEADO, ALMUERZO, AVION, PUERTA, HORA ASIGNADO, AVION 2, PUERTA 2, NOTAS |
+| **Hangar** | EMPLEADO, ESTADO, AVION, PUERTA, HORA ASIGNADO, HORA SALIDA, AVION 2, NOTAS |
+| **Turnos nocturnos** | TIPO, AVION, ESTACION, TRIPULACION, PUERTA, FALLA DIFERIDA, TECNICO AVX, N.o EMPLEADO, HORA ASIGNADO, y ademas los bloques de personal del dia, horas extra y vehiculos |
+| **En blanco** | las que quieras |
 
-1. Se sacan del texto original los **datos criticos** (horas, codigos y numeros)
-   y se comprueba que **todos** siguen en el resultado.
-2. Se busca **espanol que haya quedado sin traducir**.
-3. Se comprueba que la tabla tiene la forma correcta y que todas las filas
-   tienen el mismo numero de celdas.
+Las plantillas empiezan **vacias**: las filas del archivo de referencia son
+ejemplos, no asignaciones de nadie.
 
-Si algo falla se reintenta **una vez**, diciendole al modelo exactamente que
-fallo. Si vuelve a fallar, la aplicacion **avisa con la lista de lo que no
-cuadra** en lugar de entregar una planilla con los datos cambiados.
+### El flujo
+
+1. Eliges plantilla y rellenas fecha, turno y supervisor.
+2. Escribes o pegas la planilla **en espanol**.
+3. Pulsas **Traducir y generar Excel en ingles**.
+4. El resultado aparece en la pestana *Resultado en ingles*, **tambien
+   editable**: ahi se corrige cualquier traduccion antes de descargar.
+5. **Descargar Excel** genera el `.xlsx` con lo que hay en ese momento en la
+   cuadricula en ingles, nunca con una respuesta anterior.
+
+Si cambias la entrada despues de traducir, el resultado queda marcado como
+**desactualizado** hasta que vuelvas a traducir. Y si corriges el resultado a
+mano, esa es la version que se descarga: no se pisa sola.
+
+### Que pasa por la IA y que no
+
+- **No pasan**: matriculas (`N123AV`), puertas (`B4`), horas (`07:30`), fechas,
+  numeros, codigos (`MEL-21`, `P-0`), nombres de persona (`J. Perez`) y las
+  celdas vacias. Se copian caracter a caracter.
+- **No pasan tampoco** los encabezados de la plantilla ni los valores de
+  siempre (PRESENTE, VACACIONES, SI/NO, DIA/NOCHE...): salen de una tabla fija
+  en `lib/tabla.ts`, asi son iguales todos los dias.
+- **Si pasan** las celdas con texto de verdad, y solo esas. El modelo recibe una
+  lista de celdas con identificador y devuelve la misma lista: no ve la tabla,
+  asi que no puede mover una fila ni inventarse una columna.
+
+### Antes de dejarte descargar nada
+
+Cada respuesta se revisa celda por celda:
+
+1. **Estructura**: mismas filas, mismas columnas, cada celda en su sitio, y las
+   vacias siguen vacias.
+2. **Datos protegidos**: un dato que no debia cambiar tiene que volver
+   identico, y ningun codigo, hora o numero puede faltar.
+3. **Idioma**: nada en espanol donde deberia haber ingles, sin confundir un
+   apellido o una matricula con un error.
+
+Si algo falla se reintenta **una vez** diciendole al modelo exactamente que
+fallo. Si persiste, la aplicacion **senala la celda en rojo y dice que pasa**,
+y no deja descargar el archivo hasta que se corrija.
+
+Esto detecta inconsistencias tecnicas; no sustituye la revision de quien firma
+la planilla.
 
 ### El archivo .xlsx
 
-El boton **Excel** descarga un `.xlsx` de verdad (libreria `exceljs`):
+El boton **Descargar Excel** genera un `.xlsx` de verdad (libreria `exceljs`):
 
 - Logo a la izquierda y titulo a la derecha en azul marino, con la fecha, el
   turno y el supervisor debajo.
 - Encabezado azul `1F3864` con letra blanca, filas alternas, bordes finos y
-  texto ajustado.
+  texto ajustado. Cada bloque va con su titulo.
 - Las **horas se guardan como hora** (`07:30` con formato `hh:mm`), asi se
   pueden ordenar y restar en Excel. Las matriculas y los codigos se quedan como
   texto para que Excel no los convierta en fechas ni en numeros.
@@ -301,10 +342,18 @@ El boton **Excel** descarga un `.xlsx` de verdad (libreria `exceljs`):
 - El archivo se llama `<titulo>-AAAA-MM-DD.xlsx`.
 
 Antes de descargarlo, el archivo **se vuelve a abrir y se comprueba** que sus
-filas y columnas son las mismas que las de la tabla.
+encabezados, sus filas y sus datos son los mismos que los de la cuadricula. Si
+no coinciden, no se descarga.
 
-Un **Reporte** tambien se puede bajar a Excel: sale numerado en una tabla
-`#` / `Description`, un parrafo por fila, sin volver a llamar a la IA.
+La planilla tambien sale en **Word**, en **PDF** y por impresora, apaisada y con
+el mismo formato. Un **Reporte** de la pestana de correos tambien se puede bajar
+a Excel: sale numerado en una tabla `#` / `Description`, sin volver a llamar a
+la IA.
+
+### Donde se guarda
+
+En ningun sitio. La planilla vive mientras la pagina este abierta; no se guarda
+en el navegador ni en la nube. (La base de datos llegara mas adelante.)
 
 ## Dictado por voz
 
@@ -397,8 +446,9 @@ Las pruebas manejan un Chrome de verdad contra la aplicacion: escriben, tocan
 botones, descargan el Word, el PDF y el Excel y miran lo que sale (el `.xlsx`
 se vuelve a abrir con `exceljs` y el PDF se descomprime para leer su texto).
 Cubren la interfaz en cinco tamanos, el celular, los tipos de texto, la
-traduccion, el encadenado, los documentos y su idioma, el logo, la planilla y
-su Excel, la firma escaneada, el buscador y el dictado.
+traduccion, el encadenado, los documentos y su idioma, el logo, la cuadricula
+de planillas (escribir, pegar, deshacer, filas y columnas), el flujo completo de
+una planilla hasta su Excel, la firma escaneada, el buscador y el dictado.
 
 Si Chrome no esta en la ruta habitual se indica con `PAULA_CHROME`, y para
 probar contra otra direccion, con `PAULA_URL`.
@@ -411,6 +461,16 @@ probar contra otra direccion, con `PAULA_URL`.
 | `Ctrl / Cmd + Shift + C`| Copiar el resultado                 |
 | `Esc`                   | Cerrar la ventana o cancelar        |
 
+En la cuadricula de Planillas:
+
+| Atajo                    | Accion                             |
+| ------------------------ | ---------------------------------- |
+| Flechas, `Tab`, `Inicio` | Moverse entre celdas               |
+| `Enter`, `F2`            | Escribir en la celda               |
+| `Supr`                   | Vaciar sin borrar la fila          |
+| `Ctrl + C` / `Ctrl + V`  | Copiar y pegar un bloque           |
+| `Ctrl + Z` / `Ctrl + Shift + Z` | Deshacer y rehacer          |
+
 ## Cambiar los colores
 
 La aplicacion es siempre oscura. Todos los colores estan en el bloque `:root`
@@ -421,6 +481,7 @@ de `app/globals.css`: cambiando esas variables cambia la interfaz entera.
 ```
 app/
   api/process/route.ts   Procesa el texto y devuelve la respuesta en streaming
+  api/planilla/route.ts  Traduce la planilla celda a celda y la revisa
   api/subject/route.ts   Sugiere 3 asuntos de correo
   layout.tsx             Tema, tipografia y metadatos
   page.tsx               Abre directamente el editor
@@ -433,7 +494,9 @@ lib/
   detect-language.ts     Deteccion local de idioma
   storage.ts             Preferencias, borrador e historial en localStorage
   clipboard.ts           Copiar y pegar con Clipboard API y respaldo
-  tabla.ts               Planillas: leer TSV, mapa de encabezados y validador
+  planilla.ts            Modelo de la planilla y operaciones de la cuadricula
+  plantillas.ts          Las plantillas de AVX (terminal, hangar, noches)
+  tabla.ts               Mapas de traduccion fija y validacion celda a celda
   export/i18n.ts         Etiquetas y fechas de los documentos (es / en)
   export/logo.ts         Logo de American Airlines, leido una sola vez
   export/docx.ts         Generacion de .docx real (libreria docx)

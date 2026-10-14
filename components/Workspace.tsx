@@ -10,11 +10,12 @@ import { LanguageRoute } from "@/components/LanguageRoute";
 import { OptionsBar } from "@/components/OptionsBar";
 import { OutputPanel, type Route } from "@/components/OutputPanel";
 import { PrintSheet } from "@/components/PrintSheet";
+import { PlanillaWorkspace } from "@/components/PlanillaWorkspace";
 import { QuickActions } from "@/components/QuickActions";
 import { SectionTabs } from "@/components/SectionTabs";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useToast } from "@/components/ui/Toast";
-import { MAIN_ACTIONS, SHEET_ACTIONS } from "@/lib/actions";
+import { MAIN_ACTIONS } from "@/lib/actions";
 import {
   MAX_MAILTO_LENGTH,
   buildMailto,
@@ -32,7 +33,7 @@ import { downloadPdf } from "@/lib/export/pdf";
 import { downloadXlsx } from "@/lib/export/xlsx";
 import { endsWithSignature } from "@/lib/export/layout";
 import { resolveTargetLang } from "@/lib/prompts";
-import { tablaATexto, tablaDeParrafos } from "@/lib/tabla";
+import { planillaDeParrafos } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_PREFS,
@@ -54,9 +55,9 @@ import type {
   ReportImage,
   Seccion,
   SignatureDrawing,
+  SheetDoc,
   Status,
   SubjectResponse,
-  TableData,
   TextType,
   Tone,
 } from "@/types";
@@ -66,45 +67,6 @@ const GENERIC_ERROR =
 
 /** Como se llama cada descarga en el aviso de "listo". */
 const NOMBRES_EXPORT = { docx: "Word", pdf: "PDF", xlsx: "Excel" } as const;
-
-/** Lo que cambia al saltar de una pestana a la otra. */
-interface Contenido {
-  text: string;
-  output: string;
-  table: TableData | null;
-  subject: string;
-  subjectOptions: string[];
-  images: ReportImage[];
-  outputLang: Lang;
-  status: Status;
-  error: string | null;
-  route: Route | null;
-  unchanged: boolean;
-  previousText: string | null;
-  primaryAction: Action;
-  langOverride: Lang | null;
-}
-
-/** Pestana recien abierta, sin nada escrito. */
-function vacio(seccion: Seccion): Contenido {
-  return {
-    text: "",
-    output: "",
-    table: null,
-    subject: "",
-    subjectOptions: [],
-    images: [],
-    outputLang: "es",
-    status: "idle",
-    error: null,
-    route: null,
-    unchanged: false,
-    previousText: null,
-    // En una planilla lo normal es traducir; en un correo, corregir.
-    primaryAction: seccion === "planillas" ? "translate" : "correct",
-    langOverride: null,
-  };
-}
 
 export function Workspace() {
   const { toast } = useToast();
@@ -116,21 +78,17 @@ export function Workspace() {
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
   const [images, setImages] = useState<ReportImage[]>([]);
   const [signatureImage, setSignatureImage] = useState<SignatureDrawing | null>(null);
-  /** Planilla del ultimo resultado, cuando salio en forma de tabla. */
-  const [table, setTable] = useState<TableData | null>(null);
   /**
    * Idioma en el que salio el resultado. Es el que mandan los documentos:
    * un correo en ingles se descarga con el encabezado y la fecha en ingles.
    */
   const [outputLang, setOutputLang] = useState<Lang>("es");
+  /** La planilla traducida, para poder imprimirla desde la hoja de impresion. */
+  const [planillaImpresa, setPlanillaImpresa] = useState<SheetDoc | null>(null);
 
   // ----- pestana -----
-  /**
-   * Correos y planillas van por separado: lo que hay escrito en una se guarda
-   * aqui al cambiar de pestana y vuelve tal cual al regresar.
-   */
+  /** Correos y planillas son dos mitades distintas, cada una con lo suyo. */
   const [seccion, setSeccion] = useState<Seccion>("correos");
-  const otraPestana = useRef<Contenido>(vacio("planillas"));
 
   // ----- preferencias -----
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -164,15 +122,10 @@ export function Workspace() {
   // ----- carga inicial (localStorage) -----
   useEffect(() => {
     const guardadas = loadPrefs();
-    const abierta = guardadas.seccion;
-    const otra: Seccion = abierta === "correos" ? "planillas" : "correos";
-
     setPrefs(guardadas);
     setHistory(loadHistory());
-    setSeccion(abierta);
-    setText(loadDraft(abierta));
-    // El borrador de la otra pestana espera listo, sin pisar el de esta.
-    otraPestana.current = { ...vacio(otra), text: loadDraft(otra) };
+    setSeccion(guardadas.seccion);
+    setText(loadDraft());
     const guardada = loadSignatureImage();
     if (guardada?.deSerie) {
       // Venia del archivo de la aplicacion: si ese archivo ya no esta, se
@@ -222,22 +175,16 @@ export function Workspace() {
   }, [hydrated, prefs, lang, seccion]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => saveDraft(seccion, text), 400);
+    const timer = window.setTimeout(() => saveDraft(text), 400);
     return () => window.clearTimeout(timer);
-  }, [seccion, text]);
+  }, [text]);
 
   const updatePrefs = useCallback((patch: Partial<Prefs>) => {
     setPrefs((current) => ({ ...current, ...patch }));
   }, []);
 
-  /** La planilla devuelve una tabla en vez de texto corrido. */
   const esPlanilla = seccion === "planillas";
-
-  /**
-   * Tipo de texto que vale ahora mismo. En la pestana de planillas siempre es
-   * "sheet"; en la de correos, el del selector.
-   */
-  const textType: TextType = esPlanilla ? "sheet" : prefs.textType;
+  const textType: TextType = prefs.textType;
 
   /** Titulo del documento, en el idioma del resultado. */
   const typeLabel = useMemo(
@@ -289,7 +236,6 @@ export function Workspace() {
       setStatus("loading");
       setError(null);
       setOutput("");
-      setTable(null);
       setUnchanged(false);
       setMobileView("output");
       // La ruta solo tiene sentido cuando el texto cambia de idioma.
@@ -310,7 +256,6 @@ export function Workspace() {
             textType,
             subject: textType === "email" ? subject : undefined,
             signature: textType === "email" ? prefs.signature : undefined,
-            format: esPlanilla ? "table" : "text",
           }),
         });
 
@@ -319,26 +264,14 @@ export function Workspace() {
           throw new Error(data?.error ?? GENERIC_ERROR);
         }
 
-        let hoja: TableData | null = null;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-        if (esPlanilla) {
-          // La planilla llega entera y ya revisada: no hay nada que ir
-          // pintando mientras se escribe.
-          const data = (await response.json()) as { table?: TableData };
-          if (!data.table) throw new Error(GENERIC_ERROR);
-          hoja = data.table;
-          received = tablaATexto(data.table, target);
-          setTable(data.table);
-        } else {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            received += decoder.decode(value, { stream: true });
-            setOutput(received);
-          }
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          received += decoder.decode(value, { stream: true });
+          setOutput(received);
         }
 
         const finalText = received.trim();
@@ -374,7 +307,6 @@ export function Workspace() {
           textType,
           tone: prefs.tone,
           createdAt: Date.now(),
-          table: hoja ?? undefined,
         });
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -389,7 +321,6 @@ export function Workspace() {
       }
     },
     [
-      esPlanilla,
       lang,
       prefs.signature,
       prefs.tone,
@@ -504,14 +435,12 @@ export function Workspace() {
   // ----- exportar -----
   const exportPayload = useMemo(
     () => ({
-      // La planilla lleva su propio titulo; el resto, el del tipo de texto.
-      title: table?.title || typeLabel,
+      title: typeLabel,
       subject: textType === "email" && subject.trim() ? subject.trim() : undefined,
       body: output,
       // El documento se escribe en el idioma del resultado, no en el de la app.
       lang: outputLang,
       images: textType === "report" ? images : undefined,
-      table,
       signature: prefs.signature,
       signatureImage,
       includeLogo: prefs.includeLogo,
@@ -524,27 +453,25 @@ export function Workspace() {
       prefs.signature,
       signatureImage,
       subject,
-      table,
       textType,
       typeLabel,
     ],
   );
 
   /**
-   * Lo que se descarga como Excel. La planilla trae su tabla; un reporte se
-   * numera aqui mismo, parrafo por parrafo, sin volver a llamar a la IA.
+   * Un reporte tambien se puede bajar a Excel: se numera aqui mismo, parrafo
+   * por parrafo, sin volver a llamar a la IA.
    */
-  const tablaExcel = useMemo(() => {
-    if (table) return table;
+  const hojaDelReporte = useMemo((): SheetDoc | null => {
     if (textType !== "report" || !output.trim()) return null;
-    return tablaDeParrafos(output, outputLang, subject.trim() || typeLabel);
-  }, [output, outputLang, subject, table, textType, typeLabel]);
+    return planillaDeParrafos(output, outputLang, subject.trim() || typeLabel);
+  }, [output, outputLang, subject, textType, typeLabel]);
 
   const handleExport = useCallback(
     async (kind: "docx" | "pdf" | "xlsx") => {
       if (!output) return;
-      if (kind === "xlsx" && !tablaExcel) {
-        toast("El Excel sale con las planillas y los reportes", "info");
+      if (kind === "xlsx" && !hojaDelReporte) {
+        toast("El Excel sale con los reportes y con las planillas", "info");
         return;
       }
 
@@ -552,9 +479,9 @@ export function Workspace() {
       try {
         if (kind === "docx") await downloadDocx(exportPayload);
         else if (kind === "pdf") await downloadPdf(exportPayload);
-        else if (tablaExcel) {
+        else if (hojaDelReporte) {
           await downloadXlsx({
-            table: tablaExcel,
+            doc: hojaDelReporte,
             lang: outputLang,
             includeLogo: prefs.includeLogo,
           });
@@ -567,14 +494,13 @@ export function Workspace() {
         setBusyExport(null);
       }
     },
-    [exportPayload, output, outputLang, prefs.includeLogo, tablaExcel, toast],
+    [exportPayload, hojaDelReporte, output, outputLang, prefs.includeLogo, toast],
   );
 
   // ----- limpiar / restaurar -----
   const clearInput = useCallback(() => {
     setText("");
     setOutput("");
-    setTable(null);
     setRoute(null);
     setPreviousText(null);
     setLangOverride(null);
@@ -584,76 +510,18 @@ export function Workspace() {
     setSubjectOptions([]);
     setStatus("idle");
     setError(null);
-    saveDraft(seccion, "");
+    saveDraft("");
     textareaRef.current?.focus();
-  }, [seccion]);
+  }, []);
 
   /**
-   * Cambia de pestana guardando lo que habia en la actual.
-   * Al volver, el texto, el resultado y la tabla estan donde se dejaron.
+   * Cambia de pestana. Las dos siguen montadas, asi que lo que hay escrito en
+   * cada una se queda donde estaba.
    */
-  const cambiarSeccion = useCallback(
-    (destino: Seccion) => {
-      if (destino === seccion) return;
-
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setRunning(null);
-
-      const actual: Contenido = {
-        text,
-        output,
-        table,
-        subject,
-        subjectOptions,
-        images,
-        outputLang,
-        status,
-        error,
-        route,
-        unchanged,
-        previousText,
-        primaryAction,
-        langOverride,
-      };
-      const llega = otraPestana.current;
-      otraPestana.current = actual;
-
-      setSeccion(destino);
-      setText(llega.text);
-      setOutput(llega.output);
-      setTable(llega.table);
-      setSubject(llega.subject);
-      setSubjectOptions(llega.subjectOptions);
-      setImages(llega.images);
-      setOutputLang(llega.outputLang);
-      setStatus(llega.status);
-      setError(llega.error);
-      setRoute(llega.route);
-      setUnchanged(llega.unchanged);
-      setPreviousText(llega.previousText);
-      setPrimaryAction(llega.primaryAction);
-      setLangOverride(llega.langOverride);
-      setMobileView("input");
-    },
-    [
-      error,
-      images,
-      langOverride,
-      output,
-      outputLang,
-      previousText,
-      primaryAction,
-      route,
-      seccion,
-      status,
-      subject,
-      subjectOptions,
-      table,
-      text,
-      unchanged,
-    ],
-  );
+  const cambiarSeccion = useCallback((destino: Seccion) => {
+    setSeccion(destino);
+    setMobileView("input");
+  }, []);
 
   /** Vuelve al texto que habia antes del ultimo encadenado. */
   const undoChain = useCallback(() => {
@@ -668,7 +536,6 @@ export function Workspace() {
   const restore = useCallback((item: HistoryItem) => {
     setText(item.input);
     setOutput(item.output);
-    setTable(item.table ?? null);
     setOutputLang(item.lang);
     setSubject(item.subject ?? "");
     setPrefs((current) => ({
@@ -688,20 +555,11 @@ export function Workspace() {
     setHistory((current) => saveHistory(current.filter((item) => item.id !== id)));
   }, []);
 
-  /** Borra lo guardado de esta pestana y deja intacto lo de la otra. */
   const removeHistory = useCallback(() => {
-    setHistory((current) => {
-      const resto = current.filter((item) =>
-        esPlanilla ? item.textType !== "sheet" : item.textType === "sheet",
-      );
-      if (resto.length === 0) {
-        clearStoredHistory();
-        return [];
-      }
-      return saveHistory(resto);
-    });
-    toast(esPlanilla ? "Planillas guardadas eliminadas" : "Correos guardados eliminados");
-  }, [esPlanilla, toast]);
+    clearStoredHistory();
+    setHistory([]);
+    toast("Historial eliminado");
+  }, [toast]);
 
   // ----- atajos de teclado -----
   useEffect(() => {
@@ -739,15 +597,6 @@ export function Workspace() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [copyResult, output, primaryAction, run, settingsOpen, toast]);
 
-  /** Lo guardado de esta pestana: los correos y las planillas no se mezclan. */
-  const guardados = useMemo(
-    () =>
-      history.filter((item) =>
-        esPlanilla ? item.textType === "sheet" : item.textType !== "sheet",
-      ),
-    [esPlanilla, history],
-  );
-
   const busy = running !== null;
 
   return (
@@ -758,6 +607,9 @@ export function Workspace() {
         <div className="flex flex-col gap-3 sm:gap-4">
           <SectionTabs value={seccion} onChange={cambiarSeccion} />
 
+          {/* Las dos pestanas siguen montadas: cambiar de una a otra no puede
+              borrar lo que se estaba escribiendo en la de al lado. */}
+          <div className={cn("flex-col gap-3 sm:gap-4", esPlanilla ? "hidden" : "flex")}>
           <LanguageRoute
             source={lang}
             onSourceChange={(value) => {
@@ -775,13 +627,11 @@ export function Workspace() {
               setLangOverride(targetLang);
               updatePrefs({ targetLang: lang });
             }}
-            esPlanilla={esPlanilla}
           />
 
           <OptionsBar
             tone={prefs.tone}
             onToneChange={(tone: Tone) => updatePrefs({ tone })}
-            seccion={seccion}
             textType={prefs.textType}
             onTextTypeChange={(textType: TextType) => updatePrefs({ textType })}
             subject={subject}
@@ -856,7 +706,6 @@ export function Workspace() {
               onUndo={previousText !== null ? undoChain : undefined}
               onPaste={pasteFromClipboard}
               pasteEnabled={pasteEnabled}
-              esPlanilla={esPlanilla}
               textareaRef={textareaRef}
             />
 
@@ -869,9 +718,7 @@ export function Workspace() {
               unchanged={unchanged}
               onCopy={copyResult}
               onCopySigned={copySigned}
-              table={table}
-              canExportXlsx={tablaExcel !== null}
-              esPlanilla={esPlanilla}
+              canExportXlsx={hojaDelReporte !== null}
               lang={outputLang}
               onDownloadDocx={() => void handleExport("docx")}
               onDownloadPdf={() => void handleExport("pdf")}
@@ -884,7 +731,7 @@ export function Workspace() {
 
           <div className="flex flex-col gap-2">
             <ActionsRow
-              actions={esPlanilla ? SHEET_ACTIONS : MAIN_ACTIONS}
+              actions={MAIN_ACTIONS}
               primary={primaryAction}
               running={running}
               disabled={busy}
@@ -903,20 +750,29 @@ export function Workspace() {
             </p>
           </div>
 
-          {esPlanilla ? null : (
-            <QuickActions
-              running={running}
-              disabled={busy}
-              onRun={(action) => void run(action)}
-            />
-          )}
+          <QuickActions
+            running={running}
+            disabled={busy}
+            onRun={(action) => void run(action)}
+          />
 
           <HistoryList
-            items={guardados}
+            items={history}
             onRestore={restore}
             onRemove={removeHistoryItem}
             onClear={removeHistory}
           />
+          </div>
+
+          <div className={esPlanilla ? "block" : "hidden"}>
+            <PlanillaWorkspace
+              activa={esPlanilla}
+              includeLogo={prefs.includeLogo}
+              signature={prefs.signature}
+              signatureImage={signatureImage}
+              onPlanillaChange={setPlanillaImpresa}
+            />
+          </div>
         </div>
 
         <footer className="mt-12 flex items-center justify-center gap-3 text-xs text-muted">
@@ -938,12 +794,12 @@ export function Workspace() {
       />
 
       <PrintSheet
-        title={exportPayload.title}
-        subject={exportPayload.subject}
-        body={output}
-        lang={outputLang}
-        images={exportPayload.images}
-        table={table}
+        title={esPlanilla ? (planillaImpresa?.title ?? "") : exportPayload.title}
+        subject={esPlanilla ? undefined : exportPayload.subject}
+        body={esPlanilla ? "" : output}
+        lang={esPlanilla ? "en" : outputLang}
+        images={esPlanilla ? undefined : exportPayload.images}
+        sheet={esPlanilla ? planillaImpresa : null}
         signature={prefs.signature}
         signatureImage={signatureImage}
         includeLogo={prefs.includeLogo}

@@ -1,7 +1,8 @@
 import { labels, longDate, photoCaption } from "@/lib/export/i18n";
 import { parseSignature, splitClosing } from "@/lib/export/layout";
 import { LOGO_PATH } from "@/lib/export/logo";
-import type { Lang, ReportImage, SignatureDrawing, TableData } from "@/types";
+import { paraExportar } from "@/lib/planilla";
+import type { Lang, ReportImage, SheetDoc, SignatureDrawing } from "@/types";
 
 /** Solo visible al imprimir: hoja limpia con titulo, asunto, contenido y fotos. */
 export function PrintSheet({
@@ -10,7 +11,7 @@ export function PrintSheet({
   body,
   lang,
   images,
-  table = null,
+  sheet = null,
   signature = "",
   signatureImage = null,
   includeLogo = true,
@@ -21,7 +22,7 @@ export function PrintSheet({
   /** Idioma del documento: el mismo en el que salio el resultado. */
   lang: Lang;
   images?: ReportImage[];
-  table?: TableData | null;
+  sheet?: SheetDoc | null;
   signature?: string;
   signatureImage?: SignatureDrawing | null;
   includeLogo?: boolean;
@@ -32,16 +33,17 @@ export function PrintSheet({
     ? splitClosing(body, firma.name)
     : { body, closing: null };
 
+  const planilla = sheet ? paraExportar(sheet) : null;
   const datos = [
-    table?.meta.date && `${textos.date}: ${table.meta.date}`,
-    table?.meta.shift && `${textos.shift}: ${table.meta.shift}`,
-    table?.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+    planilla?.meta.date && `${textos.date}: ${planilla.meta.date}`,
+    planilla?.meta.shift && `${textos.shift}: ${planilla.meta.shift}`,
+    planilla?.meta.supervisor && `${textos.supervisor}: ${planilla.meta.supervisor}`,
   ].filter(Boolean) as string[];
 
   return (
     <div className="print-sheet hidden" aria-hidden>
       {/* La planilla se imprime apaisada, como el Excel y el PDF. */}
-      {table ? <style>{"@media print { @page { size: A4 landscape } }"}</style> : null}
+      {planilla ? <style>{"@media print { @page { size: A4 landscape } }"}</style> : null}
 
       {includeLogo ? (
         /* eslint-disable-next-line @next/next/no-img-element */
@@ -58,30 +60,35 @@ export function PrintSheet({
         </p>
       ) : null}
 
-      {table ? (
+      {planilla ? (
         <>
           {datos.length > 0 ? <p className="print-meta">{datos.join(" · ")}</p> : null}
-          <table className="print-table">
-            <thead>
-              <tr>
-                {table.columns.map((columna, indice) => (
-                  <th key={`${columna}-${indice}`}>{columna}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {table.rows.map((fila, indiceFila) => (
-                <tr key={indiceFila}>
-                  {table.columns.map((_, indiceColumna) => (
-                    <td key={indiceColumna}>{fila[indiceColumna] ?? ""}</td>
+          {planilla.sections.map((bloque, indiceBloque) => (
+            <div key={indiceBloque}>
+              {bloque.title ? <h2 className="print-bloque">{bloque.title}</h2> : null}
+              <table className="print-table">
+                <thead>
+                  <tr>
+                    {bloque.columns.map((columna, indice) => (
+                      <th key={`${columna}-${indice}`}>{columna}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bloque.rows.map((fila, indiceFila) => (
+                    <tr key={indiceFila}>
+                      {bloque.columns.map((_, indiceColumna) => (
+                        <td key={indiceColumna}>{fila[indiceColumna] ?? ""}</td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {table.notes ? (
+                </tbody>
+              </table>
+            </div>
+          ))}
+          {planilla.notes ? (
             <p className="print-notes">
-              {textos.notes}: {table.notes}
+              {textos.notes}: {planilla.notes}
             </p>
           ) : null}
         </>

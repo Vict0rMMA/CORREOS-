@@ -1,4 +1,4 @@
-import type { Action, Lang, ProcessRequest, TextType, Tone } from "@/types";
+import type { Action, Lang, ProcessRequest, SheetCell, TextType, Tone } from "@/types";
 
 /**
  * Prompt del sistema: editor profesional bilingue espanol-ingles.
@@ -198,101 +198,65 @@ export function buildRetryPrompt(req: ProcessRequest, rejected: string): string 
 }
 
 // ---------------------------------------------------------------------------
-// Planillas (salida en tabla)
+// Planillas: traduccion celda a celda
 // ---------------------------------------------------------------------------
 
-/** Reglas comunes a todo lo que acaba dentro de una celda. */
-const TABLE_RULES = [
-  "Never invent rows, columns, data or notes. Only what the source says.",
-  "An empty cell is an empty string.",
-  "Copy codes, tail numbers, gate numbers, times, dates and numbers character by character; never translate or reformat them.",
-  "Keep cells short: this is a table, not prose. No trailing periods on short entries.",
-];
-
-/** Mensaje de usuario para convertir un texto libre en una tabla. */
-export function buildTablePrompt(req: ProcessRequest): string {
-  const target = resolveTargetLang(req.action, req.lang);
-  const labels = target === "en" ? ["#", "Description"] : ["#", "Descripción"];
-
-  return [
-    `TASK: turn the text below into a table, written in ${LANG_NAMES[target]}.`,
-    `OUTPUT LANGUAGE: ${LANG_NAMES[target]}. Every column name, every cell and every note must be in ${LANG_NAMES[target]}.`,
-    `TONE: ${TONE_INSTRUCTIONS[req.tone]}`,
-    "RULES:",
-    ...TABLE_RULES.map((rule) => `- ${rule}`),
-    "- Every row must have exactly as many cells as there are columns.",
-    `- If the text is not tabular, use the columns ${JSON.stringify(labels)} and put one paragraph per row.`,
-    "- title: a short heading for the sheet. meta.date, meta.shift and meta.supervisor: only if the text states them.",
-    "- notes: anything that does not fit in the table. Leave it out if there is nothing.",
-    "---- TEXT ----",
-    req.text.trim(),
-  ].join("\n");
-}
-
 /**
- * Mensaje de usuario para traducir solo las celdas con texto.
+ * Mensaje de usuario para traducir las celdas de una planilla.
  *
- * Cuando el usuario pega una tabla, las columnas y las celdas con codigos,
- * horas o numeros se resuelven sin IA. Al modelo solo le llega la lista de
- * celdas con texto de verdad, y tiene que devolver la misma cantidad.
+ * Al modelo nunca le llega la tabla entera: solo la lista de celdas con texto
+ * de verdad, cada una con su identificador. Asi no puede mover una fila, ni
+ * inventarse una columna, ni devolver una matricula cambiada; lo unico que
+ * puede hacer es traducir el texto que se le da.
  */
-export function buildCellsPrompt(cells: string[], target: Lang): string {
+export function buildCellsPrompt(cells: SheetCell[], target: Lang): string {
   return [
-    `TASK: translate each entry of the list below into ${LANG_NAMES[target]}.`,
-    "They are cells of an aircraft maintenance sheet.",
+    `TASK: translate the "text" of each entry below into ${LANG_NAMES[target]}.`,
+    "These are cells of an American Airlines aircraft maintenance assignment sheet.",
     "RULES:",
-    ...TABLE_RULES.map((rule) => `- ${rule}`),
-    `- Return exactly ${cells.length} entries, in the same order. Entry i is the translation of entry i.`,
-    "- Translate the meaning, do not transliterate. Use the standard US industry term.",
+    `- Return one entry per input entry, with the SAME "id". ${cells.length} in, ${cells.length} out.`,
+    "- Translate the meaning, not word by word. Use the standard US aviation maintenance term.",
+    "- Keep it short: these are table cells, not sentences. No trailing periods on short entries.",
+    "- Copy codes, tail numbers, gate numbers, times, dates and numbers character by character.",
+    "- Keep people's names exactly as written, accents included.",
     "- If an entry is already correct in the target language, repeat it unchanged.",
-    "- Never merge, split, reorder or drop entries.",
+    "- Never merge, split, reorder, drop or invent entries.",
     "---- ENTRIES ----",
-    JSON.stringify(cells, null, 0),
+    JSON.stringify(cells),
   ].join("\n");
 }
 
-/** Lo que se le dice al modelo cuando su tabla no paso la revision. */
-export function buildTableRetryPrompt(previous: string, problems: string[]): string {
+/** Lo que se le dice al modelo cuando su respuesta no paso la revision. */
+export function buildCellsRetryPrompt(previous: string, problems: string[]): string {
   return [
     "Your previous answer was REJECTED. These are the exact problems:",
-    ...problems.map((problem) => `- ${problem}`),
-    "Fix every one of them. Keep everything that was already right.",
-    "Do not add or remove rows. Codes, times and numbers must appear exactly as in the source.",
+    ...problems.slice(0, 15).map((problem) => `- ${problem}`),
+    "Fix every one of them and keep everything that was already right.",
+    "Return the same ids, the same number of entries, and leave codes, times and numbers untouched.",
     "---- PREVIOUS ANSWER ----",
     previous.slice(0, 4000),
   ].join("\n");
 }
 
 /**
- * Esquema de la tabla que devuelve el modelo.
+ * Esquema de la respuesta.
  * Con el esquema puesto, el proveedor ya no puede contestar con texto suelto
  * ni envolver el JSON en comillas.
  */
-export const TABLE_SCHEMA: Record<string, unknown> = {
-  type: "OBJECT",
-  properties: {
-    title: { type: "STRING" },
-    meta: {
-      type: "OBJECT",
-      properties: {
-        date: { type: "STRING" },
-        shift: { type: "STRING" },
-        supervisor: { type: "STRING" },
-      },
-    },
-    columns: { type: "ARRAY", items: { type: "STRING" } },
-    rows: { type: "ARRAY", items: { type: "ARRAY", items: { type: "STRING" } } },
-    notes: { type: "STRING" },
-  },
-  required: ["title", "columns", "rows"],
-  propertyOrdering: ["title", "meta", "columns", "rows", "notes"],
-};
-
-/** Esquema de la lista de celdas traducidas. */
 export const CELLS_SCHEMA: Record<string, unknown> = {
   type: "OBJECT",
   properties: {
-    cells: { type: "ARRAY", items: { type: "STRING" } },
+    cells: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING" },
+          text: { type: "STRING" },
+        },
+        required: ["id", "text"],
+      },
+    },
   },
   required: ["cells"],
 };

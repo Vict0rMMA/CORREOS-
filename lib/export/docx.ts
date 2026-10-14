@@ -9,7 +9,8 @@ import { documentFooter, parseSignature, splitClosing } from "@/lib/export/layou
 import { cargarLogo, medidaLogo } from "@/lib/export/logo";
 import { dataUrlToBytes, fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
-import type { Lang, ReportImage, SignatureDrawing, TableData } from "@/types";
+import { paraExportar } from "@/lib/planilla";
+import type { Lang, ReportImage, SheetDoc, SignatureDrawing } from "@/types";
 
 export interface ExportPayload {
   /** Titulo del documento (p. ej. "Correo" o "Email"). */
@@ -22,8 +23,8 @@ export interface ExportPayload {
   lang: Lang;
   /** Fotos del reporte, en orden. */
   images?: ReportImage[];
-  /** Planilla, cuando el resultado vino en forma de tabla. */
-  table?: TableData | null;
+  /** Planilla, cuando lo que se exporta es una tabla. */
+  sheet?: SheetDoc | null;
   /** Firma que cierra el documento: nombre en la primera linea, cargo debajo. */
   signature?: string;
   /** Firma escaneada, que se dibuja sobre la linea. */
@@ -59,7 +60,7 @@ export async function downloadDocx({
   body,
   lang,
   images = [],
-  table = null,
+  sheet = null,
   signature = "",
   signatureImage = null,
   includeLogo = true,
@@ -143,12 +144,13 @@ export async function downloadDocx({
     );
   }
 
-  if (table) {
+  if (sheet) {
     // --- Planilla ---
+    const planilla = paraExportar(sheet);
     const datos = [
-      table.meta.date && `${textos.date}: ${table.meta.date}`,
-      table.meta.shift && `${textos.shift}: ${table.meta.shift}`,
-      table.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+      planilla.meta.date && `${textos.date}: ${planilla.meta.date}`,
+      planilla.meta.shift && `${textos.shift}: ${planilla.meta.shift}`,
+      planilla.meta.supervisor && `${textos.supervisor}: ${planilla.meta.supervisor}`,
     ].filter(Boolean) as string[];
 
     if (datos.length > 0) {
@@ -186,33 +188,54 @@ export async function downloadDocx({
         ],
       });
 
-    children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [
-          new TableRow({
-            tableHeader: true,
-            children: table.columns.map((nombre) => celda(nombre, true, false)),
-          }),
-          ...table.rows.map(
-            (fila, indice) =>
-              new TableRow({
-                children: table.columns.map((_, columna) =>
-                  celda(fila[columna] ?? "", false, indice % 2 === 1),
-                ),
+    // Cada bloque va con su titulo: la planilla de noches lleva ademas el
+    // personal del dia, las horas extra y los vehiculos.
+    planilla.sections.forEach((bloque, indice) => {
+      if (bloque.title) {
+        children.push(
+          new Paragraph({
+            spacing: { before: indice === 0 ? 120 : 300, after: 120 },
+            children: [
+              new TextRun({
+                text: bloque.title,
+                bold: true,
+                size: 20,
+                color: AZUL,
+                characterSpacing: 16,
               }),
-          ),
-        ],
-      }),
-    );
+            ],
+          }),
+        );
+      }
 
-    if (table.notes) {
+      children.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              tableHeader: true,
+              children: bloque.columns.map((nombre) => celda(nombre, true, false)),
+            }),
+            ...bloque.rows.map(
+              (fila, numero) =>
+                new TableRow({
+                  children: bloque.columns.map((_, columna) =>
+                    celda(fila[columna] ?? "", false, numero % 2 === 1),
+                  ),
+                }),
+            ),
+          ],
+        }),
+      );
+    });
+
+    if (planilla.notes) {
       children.push(
         new Paragraph({
           spacing: { before: 240, after: 120 },
           children: [
             new TextRun({
-              text: `${textos.notes}: ${table.notes}`,
+              text: `${textos.notes}: ${planilla.notes}`,
               italics: true,
               size: 18,
               color: GREY,
@@ -366,7 +389,7 @@ export async function downloadDocx({
           page: {
             margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 },
             // La planilla se lee mejor apaisada.
-            ...(table ? { size: { orientation: "landscape" as const } } : {}),
+            ...(sheet ? { size: { orientation: "landscape" as const } } : {}),
           },
         },
         footers: {
@@ -393,8 +416,8 @@ export async function downloadDocx({
   });
 
   const blob = await Packer.toBlob(doc);
-  const nombre = table
-    ? `${slugify(table.title, documentTitle("sheet", lang))}-${isoDate()}`
+  const nombre = sheet
+    ? `${slugify(sheet.title, documentTitle("sheet", lang))}-${isoDate()}`
     : slugify(subject || title);
   downloadBlob(blob, `${nombre}.docx`);
 }

@@ -17,8 +17,7 @@ import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel"
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { cn, countChars, countWords } from "@/lib/utils";
-import { labels } from "@/lib/export/i18n";
-import type { Lang, Status, TableData } from "@/types";
+import type { Lang, Status } from "@/types";
 
 export interface Route {
   from: string;
@@ -32,14 +31,10 @@ interface OutputPanelProps {
   route: Route | null;
   /** El resultado es identico al texto original. */
   unchanged: boolean;
-  /** Planilla, cuando el resultado vino en forma de tabla. */
-  table: TableData | null;
   /** Idioma en el que salio el resultado. */
   lang: Lang;
-  /** Hay algo que bajar a Excel: una planilla o un reporte numerado. */
+  /** Hay algo que bajar a Excel: de momento, un reporte numerado. */
   canExportXlsx: boolean;
-  /** Pestana de planillas: aqui no pintan las cosas de correo. */
-  esPlanilla: boolean;
   onCopy: (plain: boolean) => Promise<boolean>;
   /** Copia el texto con la firma al final, listo para pegar en el correo. */
   onCopySigned: () => Promise<boolean>;
@@ -71,73 +66,14 @@ function FlightStrip({ flying }: { flying: boolean }) {
   );
 }
 
-/** La planilla tal y como va a salir: encabezado azul y filas alternas. */
-function TablePreview({ table, lang }: { table: TableData; lang: Lang }) {
-  const textos = labels(lang);
-  const datos = [
-    table.meta.date && `${textos.date}: ${table.meta.date}`,
-    table.meta.shift && `${textos.shift}: ${table.meta.shift}`,
-    table.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
-  ].filter(Boolean);
-
-  return (
-    <div className="flex flex-col gap-3">
-      {table.title ? (
-        <h3 className="title-serif text-[18px] text-ink">{table.title}</h3>
-      ) : null}
-      {datos.length > 0 ? (
-        <p className="text-[12px] font-medium text-muted">{datos.join(" · ")}</p>
-      ) : null}
-
-      <div className="scroll-slim -mx-1 overflow-x-auto px-1">
-        <table className="w-full min-w-max border-collapse text-[13px]">
-          <thead>
-            <tr>
-              {table.columns.map((columna, indice) => (
-                <th
-                  key={`${columna}-${indice}`}
-                  scope="col"
-                  className="whitespace-nowrap border border-[#2b4572] bg-[#1f3864] px-2.5 py-2 text-center text-[11px] font-semibold tracking-[0.04em] text-white"
-                >
-                  {columna}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((fila, indiceFila) => (
-              <tr key={indiceFila} className={indiceFila % 2 === 1 ? "bg-surface-soft" : undefined}>
-                {table.columns.map((_, indiceColumna) => (
-                  <td
-                    key={indiceColumna}
-                    className="border border-line px-2.5 py-1.5 align-middle text-ink-soft"
-                  >
-                    {fila[indiceColumna] ?? ""}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {table.notes ? (
-        <p className="text-[12px] italic leading-relaxed text-muted">{table.notes}</p>
-      ) : null}
-    </div>
-  );
-}
-
 export function OutputPanel({
   output,
   status,
   error,
   route,
   unchanged,
-  table,
   lang,
   canExportXlsx,
-  esPlanilla,
   onCopy,
   onCopySigned,
   onDownloadDocx,
@@ -205,9 +141,7 @@ export function OutputPanel({
       </PanelHeader>
 
       <div className="scroll-slim min-h-[190px] flex-1 overflow-y-auto px-4 py-4 sm:px-5 lg:min-h-[420px]">
-        {table ? (
-          <TablePreview table={table} lang={lang} />
-        ) : hasOutput ? (
+        {hasOutput ? (
           <p
             className={cn(
               "max-w-[68ch] whitespace-pre-wrap text-[16px] leading-[1.75] text-ink",
@@ -240,13 +174,9 @@ export function OutputPanel({
           <div className="flex h-full flex-col items-center justify-center gap-4 py-8 text-center">
             <FlightStrip flying={false} />
             <div className="space-y-2">
-              <p className="title-serif text-[22px] text-ink-soft">
-                {esPlanilla ? "Aquí aterriza tu planilla" : "Aquí aterriza tu texto"}
-              </p>
+              <p className="title-serif text-[22px] text-ink-soft">Aquí aterriza tu texto</p>
               <p className="max-w-[36ch] text-[13px] leading-relaxed text-muted">
-                {esPlanilla
-                  ? "La tabla, lista para bajar a Excel. Elige una acción y pulsa "
-                  : "Corregido, traducido o generado. Elige una acción y pulsa "}
+                Corregido, traducido o generado. Elige una acción y pulsa{" "}
                 <kbd className="whitespace-nowrap rounded-md border border-line bg-surface-soft px-1.5 py-0.5 font-sans text-[11px] text-ink-soft">
                   Ctrl + Enter
                 </kbd>
@@ -273,7 +203,6 @@ export function OutputPanel({
         >
           {copied === "rich" ? "Copiado" : "Copiar"}
         </Button>
-        {esPlanilla ? null : (
         <Button
           size="sm"
           variant="quiet"
@@ -290,7 +219,6 @@ export function OutputPanel({
         >
           {copied === "firma" ? "Copiado" : "Con firma"}
         </Button>
-        )}
         <Button
           size="sm"
           variant="quiet"
@@ -321,11 +249,11 @@ export function OutputPanel({
           {canExportXlsx ? (
             <Button
               size="sm"
-              variant={table ? "secondary" : "quiet"}
+              variant="quiet"
               onClick={onDownloadXlsx}
               disabled={!hasOutput}
               loading={busyExport === "xlsx"}
-              title="Descargar la planilla en Excel, con el logo y el formato de la empresa"
+              title="Descargar el reporte en Excel, numerado y con el formato de la empresa"
               icon={<Sheet aria-hidden className="size-4" />}
             >
               Excel

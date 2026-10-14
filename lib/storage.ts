@@ -62,24 +62,19 @@ export function savePrefs(prefs: Prefs): void {
   write(STORAGE_KEYS.prefs, prefs);
 }
 
-/** Cada pestana guarda su borrador por separado. */
-function claveBorrador(seccion: Seccion): string {
-  return seccion === "planillas" ? STORAGE_KEYS.draftSheet : STORAGE_KEYS.draft;
-}
-
-export function loadDraft(seccion: Seccion): string {
+export function loadDraft(): string {
   if (typeof window === "undefined") return "";
   try {
-    return window.localStorage.getItem(claveBorrador(seccion)) ?? "";
+    return window.localStorage.getItem(STORAGE_KEYS.draft) ?? "";
   } catch {
     return "";
   }
 }
 
-export function saveDraft(seccion: Seccion, text: string): void {
+export function saveDraft(text: string): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(claveBorrador(seccion), text);
+    window.localStorage.setItem(STORAGE_KEYS.draft, text);
   } catch {
     /* ignorado */
   }
