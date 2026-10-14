@@ -7,6 +7,7 @@ import {
   buildCellsRetryPrompt,
 } from "@/lib/prompts";
 import {
+  fechaParaIdioma,
   necesitaTraduccion,
   restosEnEspanol,
   revisarPlanilla,
@@ -96,20 +97,26 @@ export async function POST(request: Request): Promise<Response> {
     return { id };
   };
 
-  /** Resuelve una celda: fija si se puede, a la cola si hace falta la IA. */
-  const resolverCelda = (valor: string): Pieza => {
+  /**
+   * Resuelve una celda: fija si se puede, a la cola si hace falta la IA.
+   * La columna cuenta: "Pérez" se respeta en EMPLEADO, pero "Puntual" en
+   * NOTAS es una palabra y se traduce.
+   */
+  const resolverCelda = (valor: string, columna = ""): Pieza => {
     const texto = valor.trim();
     if (!texto) return { fijo: "" };
     const conocido = traducirValor(texto, target);
     if (conocido) return { fijo: conocido };
-    if (!necesitaTraduccion(texto, target)) return { fijo: valor };
+    if (!necesitaTraduccion(texto, target, columna)) return { fijo: valor };
     return encolar(texto);
   };
 
   const plano = origen.sections.map((seccion) => ({
     title: seccion.title ? resolverEncabezado(seccion.title) : { fijo: "" },
     columns: seccion.columns.map(resolverEncabezado),
-    rows: seccion.rows.map((fila) => fila.map(resolverCelda)),
+    rows: seccion.rows.map((fila) =>
+      fila.map((celda, columna) => resolverCelda(celda, seccion.columns[columna] ?? "")),
+    ),
   }));
 
   function resolverEncabezado(nombre: string): Pieza {
@@ -173,7 +180,8 @@ export async function POST(request: Request): Promise<Response> {
     template: origen.template,
     title: leerCelda(titulo) || origen.title,
     meta: {
-      date: origen.meta.date,
+      // 14/10/2026 en espanol es 10/14/2026 en ingles, como en el modelo.
+      date: fechaParaIdioma(origen.meta.date, target),
       shift: leerCelda(turno),
       supervisor: origen.meta.supervisor,
     },

@@ -198,6 +198,7 @@ const navegador = await abrirNavegador();
 const contexto = await navegador.newContext({
   viewport: { width: 1440, height: 1000 },
   acceptDownloads: true,
+  permissions: ["clipboard-read", "clipboard-write"],
 });
 const page = await contexto.newPage();
 page.on("pageerror", (error) => informe.anotarError(`error de página: ${error.message}`));
@@ -329,6 +330,128 @@ informe.comprobar(
     String(hoja.getRow(filaFlota + 7).getCell(3).value ?? "") === "DUAL CB",
   `${hoja.getRow(filaFlota + 1).getCell(3).value} .. ${hoja.getRow(filaFlota + 7).getCell(3).value}`,
 );
+
+// --- El Excel de las demás plantillas ---
+
+/**
+ * Un valor de prueba para cada columna, todos de los que no pasan por la IA:
+ * nombres, horas, matriculas, puertas, codigos y valores de siempre.
+ */
+function valorDePrueba(columna) {
+  const base = columna.replace(/\s+\d+$/, "");
+  const valores = {
+    EMPLEADO: "J. Pérez",
+    ALMUERZO: "12:00",
+    ESTADO: "PRESENTE",
+    "AVIÓN": "N123AV",
+    PUERTA: "B4",
+    "HORA ASIGNADO": "07:30",
+    "HORA SALIDA": "15:00",
+    NOTAS: "",
+  };
+  return valores[base] ?? "";
+}
+
+/** Lo que dice una celda leida del Excel, sea texto enriquecido o no. */
+function textoDe(valor) {
+  if (valor && typeof valor === "object" && Array.isArray(valor.richText)) {
+    return valor.richText.map((trozo) => trozo.text).join("");
+  }
+  return String(valor ?? "");
+}
+
+const TAB = String.fromCharCode(9);
+
+for (const plantilla of ["terminal", "hangar", "custom"]) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("tab", { name: /Planillas/ }).click();
+  await page.getByRole("tab", { name: "Entrada en español" }).click().catch(() => undefined);
+  page.once("dialog", (dialogo) => void dialogo.accept());
+  await page.getByLabel("Plantilla").selectOption(plantilla);
+  await page.waitForTimeout(400);
+
+  // Una fecha que se lee distinto en cada idioma: 5 de octubre.
+  await page.getByLabel("Fecha").fill("05/10/2026");
+
+  const columnas = COLUMNAS[plantilla];
+  await rejilla().locator('[data-celda="0:0"]').click();
+  await page.evaluate(
+    (texto) => navigator.clipboard.writeText(texto),
+    columnas.map(valorDePrueba).join(TAB),
+  );
+  await page.keyboard.press("Control+V");
+  await page.waitForTimeout(300);
+
+  await page.getByRole("button", { name: /Traducir y generar Excel/ }).click();
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].some((pestana) =>
+        pestana.textContent?.includes("inglés"),
+      ),
+    undefined,
+    { timeout: 120000 },
+  );
+  await page.waitForTimeout(500);
+
+  const [bajada] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60000 }),
+    page.getByRole("button", { name: "Descargar Excel" }).click(),
+  ]);
+  const ruta = path.join(DIR, `${plantilla}.xlsx`);
+  await bajada.saveAs(ruta);
+
+  const libroPlantilla = new ExcelJS.Workbook();
+  await libroPlantilla.xlsx.readFile(ruta);
+  const hojaPlantilla = libroPlantilla.worksheets[0];
+
+  let cabecera = 0;
+  hojaPlantilla.eachRow((fila, numero) => {
+    if (!cabecera && textoDe(fila.getCell(1).value) === "EMPLOYEE") cabecera = numero;
+  });
+
+  const leidas = columnas.map((_, indice) =>
+    textoDe(hojaPlantilla.getRow(cabecera).getCell(indice + 1).value),
+  );
+  const primera = hojaPlantilla.getRow(cabecera + 1);
+
+  informe.comprobar(
+    `${plantilla}: el Excel se abre y trae sus ${columnas.length} columnas`,
+    cabecera > 0 && leidas.every(Boolean) && !textoDe(hojaPlantilla.getRow(cabecera).getCell(columnas.length + 1).value),
+    `${leidas.filter(Boolean).length} columnas`,
+  );
+  informe.comprobar(
+    `${plantilla}: el empleado y la matrícula llegan iguales`,
+    textoDe(primera.getCell(1).value) === "J. Pérez" &&
+      textoDe(primera.getCell(columnas.indexOf("AVIÓN") + 1).value) === "N123AV",
+  );
+
+  const hora = primera.getCell(columnas.indexOf("HORA ASIGNADO") + 1);
+  informe.comprobar(
+    `${plantilla}: la hora va como hora`,
+    hora.numFmt === "hh:mm",
+    `${hora.numFmt}`,
+  );
+
+  // La cabecera con la fecha: en inglés, mes/día.
+  let cabeceraFecha = "";
+  hojaPlantilla.eachRow((fila) => {
+    const texto = textoDe(fila.getCell(1).value);
+    if (texto.startsWith("DATE")) cabeceraFecha = texto;
+  });
+  informe.comprobar(
+    `${plantilla}: la fecha sale como se lee en inglés (10/05/2026)`,
+    cabeceraFecha.includes("10/05/2026") && cabeceraFecha.includes("Paula Andrea Ochoa"),
+    cabeceraFecha.replace(/\s+/g, " "),
+  );
+
+  if (plantilla === "hangar") {
+    informe.comprobar(
+      "hangar: el estado se traduce sin la IA",
+      textoDe(primera.getCell(2).value) === "PRESENT",
+      textoDe(primera.getCell(2).value),
+    );
+  }
+}
 
 // --- Con tantas columnas, el celular sigue manejable ---
 await page.getByLabel("Plantilla").selectOption("hangar");

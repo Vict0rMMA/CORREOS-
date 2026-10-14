@@ -47,6 +47,37 @@ export async function writeClipboard(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * Copia una tabla en dos formatos a la vez.
+ *
+ * Excel se queda con el texto separado por tabuladores y lo reparte en celdas;
+ * Gmail u Outlook se quedan con el HTML y pegan una tabla de verdad, con sus
+ * bordes. Si el navegador no deja escribir los dos, se copia solo el texto.
+ */
+export async function writeClipboardTable(text: string, html: string): Promise<boolean> {
+  if (!text) return false;
+
+  if (
+    typeof navigator !== "undefined" &&
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function"
+  ) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/plain": new Blob([text], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        }),
+      ]);
+      return true;
+    } catch (error) {
+      console.error("[paula] no se pudo copiar como tabla, va como texto:", error);
+    }
+  }
+
+  return writeClipboard(text);
+}
+
 /** Quita formato: normaliza espacios, comillas tipograficas y saltos. */
 export function toPlainText(text: string): string {
   return text

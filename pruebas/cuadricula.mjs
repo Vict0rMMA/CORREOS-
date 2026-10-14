@@ -36,6 +36,104 @@ async function escribir(fila, columna, texto) {
   await page.waitForTimeout(120);
 }
 
+// --- 0. Lo que viene puesto, y copiar y pegar sin saber atajos ---
+const hoy = new Date();
+const fechaDeHoy = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`;
+informe.comprobar(
+  "la supervisora ya viene puesta",
+  (await page.getByLabel("Supervisor").inputValue()) === "Paula Andrea Ochoa",
+  await page.getByLabel("Supervisor").inputValue(),
+);
+informe.comprobar(
+  "y la fecha de hoy también",
+  (await page.getByLabel("Fecha").inputValue()) === fechaDeHoy,
+  await page.getByLabel("Fecha").inputValue(),
+);
+
+// Pegar sin haber tocado ninguna casilla: va a la tabla principal.
+await page.evaluate(() => document.activeElement?.blur());
+await page.evaluate(() => {
+  const datos = new DataTransfer();
+  datos.setData("text/plain", ["J. Pérez", "12:00", "N123AV"].join("\t"));
+  document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: datos, bubbles: true }));
+});
+await page.waitForTimeout(300);
+informe.comprobar(
+  "se puede pegar sin elegir casilla antes",
+  (await celda(0, 0).innerText()) === "J. Pérez" && (await celda(0, 2).innerText()) === "N123AV",
+  `${await celda(0, 0).innerText()} / ${await celda(0, 2).innerText()}`,
+);
+
+// Tocar una casilla que ya estaba elegida la abre para escribir...
+await celda(1, 0).click();
+await celda(1, 0).click();
+await page.keyboard.type("M. Gómez");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(200);
+informe.comprobar(
+  "un toque en la casilla elegida basta para escribir",
+  (await celda(1, 0).innerText()) === "M. Gómez",
+  await celda(1, 0).innerText(),
+);
+
+// ...y si en ese momento se pega una tabla, se reparte, no cae entera ahí.
+await celda(2, 0).click();
+await celda(2, 0).click();
+await page.evaluate(
+  (texto) => navigator.clipboard.writeText(texto),
+  [["L. Ríos", "13:00", "N456AV"].join("\t"), ["A. Díaz", "13:30", "N789AV"].join("\t")].join("\n"),
+);
+await page.keyboard.press("Control+V");
+await page.waitForTimeout(300);
+informe.comprobar(
+  "pegar una tabla con la casilla abierta la reparte por columnas",
+  (await celda(2, 0).innerText()) === "L. Ríos" && (await celda(3, 2).innerText()) === "N789AV",
+  `${await celda(2, 0).innerText()} / ${await celda(3, 2).innerText()}`,
+);
+
+// La barra de arriba escribe en la casilla elegida.
+await celda(0, 4).click();
+await page.getByPlaceholder("Toca una casilla y escribe aquí").fill("07:30");
+await page.keyboard.press("Enter");
+await page.waitForTimeout(200);
+informe.comprobar(
+  "la barra de arriba escribe en la casilla",
+  (await celda(0, 4).innerText()) === "07:30",
+  await celda(0, 4).innerText(),
+);
+
+// Copiar la tabla entera, con sus títulos.
+await page.getByRole("button", { name: "Copiar tabla" }).first().click();
+await page.waitForTimeout(300);
+const tablaCopiada = (await page.evaluate(() => navigator.clipboard.readText())).split("\n");
+informe.comprobar(
+  "Copiar tabla lleva los títulos y las filas escritas",
+  tablaCopiada[0].startsWith("EMPLEADO\tALMUERZO") &&
+    tablaCopiada[1].startsWith("J. Pérez\t12:00\tN123AV") &&
+    tablaCopiada.length === 5,
+  `${tablaCopiada.length} líneas`,
+);
+
+// El botón Pegar.
+await celda(5, 0).click();
+await page.evaluate((texto) => navigator.clipboard.writeText(texto), "C. Rojas");
+await page.getByRole("button", { name: "Pegar", exact: true }).first().click();
+await page.waitForTimeout(300);
+informe.comprobar(
+  "el botón Pegar pega en la casilla elegida",
+  (await celda(5, 0).innerText()) === "C. Rojas",
+  await celda(5, 0).innerText(),
+);
+
+// Se deja la planilla como estaba para el resto de la prueba. Solo el
+// primer cambio pregunta (hay datos escritos); el segundo parte de una
+// planilla limpia y no pregunta nada.
+page.once("dialog", (dialogo) => void dialogo.accept());
+await page.getByLabel("Plantilla").selectOption("hangar");
+await page.waitForTimeout(300);
+await page.getByLabel("Plantilla").selectOption("terminal");
+await page.waitForTimeout(300);
+
 // --- 1. Las cuatro plantillas ---
 const selector = page.getByLabel("Plantilla");
 const opciones = await selector.locator("option").allTextContents();

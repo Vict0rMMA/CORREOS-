@@ -385,7 +385,12 @@
 
   .print-sheet {
     display: block !important;
-    padding: 0;
+    /* Los margenes de la hoja los pone el documento, no la pagina (ver
+       @page): con clone se repiten en cada hoja impresa, no solo en la
+       primera. */
+    padding: 1.6cm 1.8cm;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     font-family: Georgia, "Times New Roman", serif;
     font-size: 12pt;
     line-height: 1.6;
@@ -578,7 +583,11 @@
     color: #666;
   }
 
+  /* Margen cero: sin sitio en el borde, el navegador no imprime su
+     encabezado ni su pie (el titulo de la pestana "PAULA CORREOS — Write
+     better...", la direccion web y la hora). El documento ya lleva su
+     propia fecha y sus margenes. */
   @page {
-    margin: 2cm;
+    margin: 0;
   }
 }

@@ -31,7 +31,7 @@ import {
   rehacer,
 } from "@/lib/planilla";
 
-import { PLANTILLAS, crearPlanilla, esPlantillaIntacta } from "@/lib/plantillas";
+import { PLANTILLAS, crearPlanilla, esPlantillaIntacta, fechaDeHoy } from "@/lib/plantillas";
 import type { Aviso } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
 import type { SheetDoc, SheetSection, SheetTemplateId, SignatureDrawing } from "@/types";
@@ -70,8 +70,15 @@ export function PlanillaWorkspace({
 }: PlanillaWorkspaceProps) {
   const { toast } = useToast();
 
+  // La supervisora es siempre la misma y la fecha casi siempre es la de hoy:
+  // vienen puestas para no tener que escribirlas cada turno.
   const [entrada, setEntrada] = useState<Historial<SheetDoc>>(() =>
-    iniciarHistorial(crearPlanilla("terminal")),
+    iniciarHistorial(
+      crearPlanilla("terminal", {
+        date: fechaDeHoy(),
+        supervisor: signature.split("\n")[0]?.trim() ?? "",
+      }),
+    ),
   );
   const [salida, setSalida] = useState<Historial<SheetDoc> | null>(null);
   const [vista, setVista] = useState<Vista>("es");
@@ -142,7 +149,8 @@ export function PlanillaWorkspace({
         );
         if (!seguro) return;
       }
-      setEntrada(iniciarHistorial(crearPlanilla(id)));
+      // La fecha, el turno y el supervisor son del dia: se quedan.
+      setEntrada(iniciarHistorial(crearPlanilla(id, entrada.presente.meta)));
       setSalida(null);
       setAvisos([]);
       setDesactualizado(false);
@@ -506,6 +514,9 @@ export function PlanillaWorkspace({
               onAnchosChange={(nuevos) => cambiarAnchos(indice, nuevos)}
               avisos={vista === "en" ? marcadas.get(indice) : undefined}
               foco={salto && salto.seccion === indice ? salto : null}
+              // Pegar sin elegir casilla va a la tabla principal.
+              pegadoGlobal={activa && indice === 0}
+              onMensaje={toast}
               ariaLabel={
                 seccion.title || (vista === "es" ? "Planilla en español" : "Planilla en inglés")
               }

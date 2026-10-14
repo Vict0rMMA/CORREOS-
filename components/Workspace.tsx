@@ -561,6 +561,28 @@ export function Workspace() {
     toast("Historial eliminado");
   }, [toast]);
 
+  // ----- impresion -----
+  // Mientras se imprime, la pestana se llama como el documento. Si algun
+  // navegador imprime aun su encabezado, sale "TERMINAL DAILY ASSIGNMENT" y
+  // no la marca de la aplicacion; y al guardar como PDF, ese es el nombre.
+  useEffect(() => {
+    let anterior = "";
+    const antes = () => {
+      anterior = document.title;
+      const titulo = esPlanilla ? planillaImpresa?.title : exportPayload.title;
+      if (titulo) document.title = titulo;
+    };
+    const despues = () => {
+      if (anterior) document.title = anterior;
+    };
+    window.addEventListener("beforeprint", antes);
+    window.addEventListener("afterprint", despues);
+    return () => {
+      window.removeEventListener("beforeprint", antes);
+      window.removeEventListener("afterprint", despues);
+    };
+  }, [esPlanilla, exportPayload.title, planillaImpresa]);
+
   // ----- atajos de teclado -----
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

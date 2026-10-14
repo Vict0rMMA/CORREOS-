@@ -46,6 +46,82 @@ const TABLA = [
   fila("M. Gómez", "12:30", "N789AV", "A1", "08:00", "Revisión completada sin novedades"),
 ].join("\n");
 
+// ---------------------------------------------------------------------------
+// 0. Notas difíciles: palabras sueltas que parecen nombres, y frases cortas
+// ---------------------------------------------------------------------------
+
+/**
+ * "Puntual" y "Ninguna" se quedaban en español porque, al empezar en
+ * mayúscula, pasaban por apellidos. Y "PRESENTE" levantaba un aviso falso.
+ */
+const NOTAS_DIFICILES = [
+  ["Carlos Gómez", "PRESENTE", "IB-6501", "Puntual"],
+  ["Ana Martínez", "PRESENTE", "AA-1204", "Cambio de turno tarde"],
+  ["Luis Torres", "VACACIONES", "CM-402", "Ninguna"],
+  ["Sofía Ramírez", "PRESENTE", "DL-9920", "Apoyo sala VIP"],
+  ["Pedro Ruiz", "INCAPACIDAD", "", "Pendiente revisar frenos"],
+  ["Marta León", "PRESENTE", "LA-4405", "Listo"],
+  ["Jorge Díaz", "PRESENTE", "UA-5541", "Sin novedad"],
+  ["Elena Soto", "DESCANSO", "", "Llega tarde, avisó al supervisor"],
+];
+
+const respuestaNotas = await fetch(`${URL_BASE}/api/planilla`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    target: "en",
+    doc: {
+      template: "hangar",
+      title: "HANGAR DAILY ASSIGNMENT",
+      meta: { date: "05/10/2026", shift: "Tarde", supervisor: "Paula Andrea Ochoa" },
+      sections: [
+        { title: "", columns: ["EMPLEADO", "ESTADO", "AVIÓN", "NOTAS"], rows: NOTAS_DIFICILES },
+      ],
+    },
+  }),
+});
+const notas = await respuestaNotas.json();
+
+informe.comprobar(
+  "las notas difíciles se traducen sin avisos",
+  respuestaNotas.ok && !notas.avisos,
+  notas.avisos ? notas.avisos.map((aviso) => aviso.message).join(" | ") : "sin avisos",
+);
+
+if (notas.doc) {
+  const filas = notas.doc.sections[0].rows;
+  console.log("\n--- notas difíciles ---");
+  filas.forEach((fila, indice) => console.log(`  ${NOTAS_DIFICILES[indice][3].padEnd(34)} -> ${fila[3]}`));
+
+  /** Palabras que delatan una nota sin traducir. */
+  const ESPANOL = /\b(puntual|ninguna|pendiente|listo|novedad|revisar|frenos|tarde|cambio|turno|sala|apoyo|llega|avis[oó]|sin)\b/i;
+  const sinTraducir = filas.filter((fila) => ESPANOL.test(fila[3]));
+  informe.comprobar(
+    "todas las notas quedan en inglés",
+    sinTraducir.length === 0,
+    sinTraducir.map((fila) => fila[3]).join(" | ") || "8 de 8",
+  );
+  informe.comprobar(
+    "ninguna nota vuelve igual que en español",
+    filas.every((fila, indice) => fila[3] !== NOTAS_DIFICILES[indice][3]),
+  );
+  informe.comprobar(
+    "los estados salen de la tabla fija",
+    filas.map((fila) => fila[1]).join("|") ===
+      "PRESENT|PRESENT|VACATION|PRESENT|SICK LEAVE|PRESENT|PRESENT|DAY OFF",
+    filas.map((fila) => fila[1]).join(" · "),
+  );
+  informe.comprobar(
+    "los nombres no se tocan",
+    filas.every((fila, indice) => fila[0] === NOTAS_DIFICILES[indice][0]),
+  );
+  informe.comprobar(
+    "el turno y la fecha pasan al inglés",
+    notas.doc.meta.shift === "AFTERNOON" && notas.doc.meta.date === "10/05/2026",
+    `${notas.doc.meta.shift} · ${notas.doc.meta.date}`,
+  );
+}
+
 const navegador = await abrirNavegador();
 const contexto = await navegador.newContext({
   viewport: { width: 1440, height: 1000 },

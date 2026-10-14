@@ -195,6 +195,48 @@ export function rangoATexto(
   return lineas.join("\n");
 }
 
+/** Escapa un texto para meterlo en HTML. */
+function escaparHtml(texto: string): string {
+  return texto
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Un bloque de celdas como tabla HTML, con el azul de la casa.
+ * Es lo que llega al correo al pegar: una tabla con bordes, no texto suelto.
+ */
+export function bloqueAHtml(encabezados: string[] | null, filas: string[][]): string {
+  const celda = "border:1px solid #BFBFBF;padding:4px 8px;font:13px Arial,sans-serif;";
+  const cabecera =
+    "border:1px solid #1F3864;padding:5px 8px;font:bold 12px Arial,sans-serif;" +
+    "background:#1F3864;color:#FFFFFF;text-align:center;";
+
+  const partes = ['<table style="border-collapse:collapse;">'];
+  if (encabezados) {
+    partes.push(
+      `<tr>${encabezados.map((nombre) => `<th style="${cabecera}">${escaparHtml(nombre)}</th>`).join("")}</tr>`,
+    );
+  }
+  filas.forEach((fila, indice) => {
+    const fondo = indice % 2 === 1 ? "background:#F2F2F2;" : "";
+    partes.push(
+      `<tr>${fila.map((valor) => `<td style="${celda}${fondo}">${escaparHtml(valor)}</td>`).join("")}</tr>`,
+    );
+  });
+  partes.push("</table>");
+  return partes.join("");
+}
+
+/** La seccion entera, con encabezados y sin las filas vacias del final. */
+export function seccionParaCopiar(seccion: SheetSection): { texto: string; html: string } {
+  const limpia = sinFilasVacias(seccion);
+  const texto = [limpia.columns, ...limpia.rows].map((fila) => fila.join("\t")).join("\n");
+  return { texto, html: bloqueAHtml(limpia.columns, limpia.rows) };
+}
+
 /**
  * Convierte lo pegado en una rejilla de celdas.
  *

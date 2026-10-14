@@ -171,6 +171,25 @@ export function traducirValor(valor: string, destino: Lang): string | null {
   return VALOR_A_INGLES.has(llave) ? valor.toUpperCase() : null;
 }
 
+/**
+ * La fecha de la cabecera, en el orden que se lee en cada idioma.
+ *
+ * En espanol es dia/mes (14/10/2026) y en Estados Unidos mes/dia
+ * (10/14/2026), que es como la trae el modelo de AVX. Dejarla igual parece
+ * inofensivo hasta que llega el 5 de octubre: "05/10/2026" en ingles es el 10
+ * de mayo. Si la fecha no tiene esa forma, o no cuadra, se deja como esta.
+ */
+export function fechaParaIdioma(fecha: string, destino: Lang): string {
+  const partes = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(fecha.trim());
+  if (!partes) return fecha;
+  const [, primero, segundo, anio] = partes;
+  // Al ir al ingles el mes es el segundo numero; al volver, el primero.
+  const mes = Number(destino === "en" ? segundo : primero);
+  const dia = Number(destino === "en" ? primero : segundo);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return fecha;
+  return `${segundo.padStart(2, "0")}/${primero.padStart(2, "0")}/${anio}`;
+}
+
 // ---------------------------------------------------------------------------
 // Celdas: que es dato y que es texto
 // ---------------------------------------------------------------------------
@@ -216,10 +235,45 @@ export function pareceNombre(valor: string): boolean {
  * true si la celda tiene texto de verdad y hay que mandarla al modelo.
  * Antes se mira si es un dato, un nombre o uno de los valores de siempre.
  */
-export function necesitaTraduccion(valor: string, destino: Lang): boolean {
-  if (esDato(valor)) return false;
+export function necesitaTraduccion(valor: string, destino: Lang, columna = ""): boolean {
   if (traducirValor(valor, destino)) return false;
-  return !pareceNombre(valor);
+  return !seCopiaTalCual(valor, columna);
+}
+
+/**
+ * Columnas donde van nombres de persona.
+ *
+ * Solo en ellas una palabra con mayuscula se toma por un nombre. Mirando la
+ * palabra sola no se puede saber: "Pérez" es un apellido, pero "Puntual",
+ * "Ninguna" o "PRESENTE" tambien empiezan en mayuscula, y se quedaban sin
+ * traducir por parecer apellidos.
+ */
+const COLUMNAS_DE_NOMBRES = new Set([
+  "empleado",
+  "nombre",
+  "tecnico",
+  "tecnico avx",
+  "conductor",
+  "supervisor",
+  "responsable",
+  "employee",
+  "name",
+  "avx tech",
+  "driver",
+]);
+
+export function esColumnaDeNombres(columna: string): boolean {
+  return COLUMNAS_DE_NOMBRES.has(clave(columna).replace(/\s+\d+$/, ""));
+}
+
+/**
+ * true si la celda se copia tal cual, sin pasar por la IA: un dato
+ * (matricula, hora, codigo, numero) en cualquier columna, o un nombre en una
+ * columna de nombres.
+ */
+export function seCopiaTalCual(valor: string, columna: string): boolean {
+  if (esDato(valor)) return true;
+  return esColumnaDeNombres(columna) && pareceNombre(valor);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +333,16 @@ const PALABRAS_ES = new Set([
   "noche", "dia", "dias", "manana", "tarde", "madrugada", "semana", "mes",
   "presente", "ausente", "vacaciones", "incapacidad", "descanso", "permiso",
   "programado", "programada", "vehiculo", "vehiculos", "conductor", "unidad",
+  // Lo que se escribe en las notas del turno, a veces en una sola palabra.
+  "ninguna", "ninguno", "ningun", "nada", "puntual", "temprano", "listo", "lista",
+  "completo", "completa", "falta", "faltan", "revisar", "revisado", "revisada",
+  "enfermo", "enferma", "retraso", "retrasado", "retrasada", "demora", "cancelado",
+  "cancelada", "reparado", "reparada", "cambiar", "llanta", "llantas", "freno",
+  "frenos", "aceite", "combustible", "rueda", "ruedas", "luz", "luces", "asiento",
+  "asientos", "limpieza", "equipaje", "pasajeros", "vuelo", "vuelos", "si", "bien",
+  "hoy", "ayer", "ahora", "despues", "antes", "siempre", "nunca", "alguno",
+  "alguna", "apoyo", "sala", "salas", "atrasado", "atrasada", "entregado",
+  "entregada", "asignado", "asignada", "disponible", "ocupado", "ocupada",
 ]);
 
 /**
@@ -419,17 +483,6 @@ export function revisarPlanilla(
 
         if (!original) return;
 
-        // Una matricula, una hora, un codigo o un nombre no se traducen: la
-        // unica forma correcta de volver es identicos. Y no se les mira el
-        // idioma, porque un codigo como "LA-4316" lleva dentro la palabra
-        // "LA" sin tener nada de espanol.
-        if (esDato(original) || pareceNombre(original)) {
-          if (original !== salida) {
-            avisar(`dice «${salida}» y en tu planilla dice «${original}»`);
-          }
-          return;
-        }
-
         // Los valores de siempre tienen su traduccion fija.
         const fijo = traducirValor(original, destino);
         if (fijo) {
@@ -438,6 +491,18 @@ export function revisarPlanilla(
           }
           return;
         }
+
+        // Una matricula, una hora, un codigo, o un nombre en su columna, no
+        // se traducen: la unica forma correcta de volver es identicos. Y no se
+        // les mira el idioma, porque un codigo como "LA-4316" lleva dentro la
+        // palabra "LA" sin tener nada de espanol.
+        if (seCopiaTalCual(original, bloque.columns[indiceColumna] ?? "")) {
+          if (original !== salida) {
+            avisar(`dice «${salida}» y en tu planilla dice «${original}»`);
+          }
+          return;
+        }
+
 
         // Lo que queda es texto que si paso por la IA.
         const perdidos = tokensPerdidos(original, salida);

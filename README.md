@@ -256,11 +256,18 @@ pasa al ingles y deja el `.xlsx` listo para descargar.
 
 ### La cuadricula
 
-- Se escribe directamente en las celdas (doble clic, Enter o empezar a teclear).
+- Para escribir basta **tocar la casilla** (un toque en el celular, o volver
+  a pulsar la que ya esta elegida), o empezar a teclear. Tambien hay una
+  **barra arriba de la tabla**, como la de Excel, donde se ve y se escribe lo
+  que tiene la casilla elegida con espacio de sobra.
 - Se navega con las **flechas**, con **Tab** y **Mayus+Tab**, con Inicio y Fin.
-- **Ctrl+C** copia el rango seleccionado con tabuladores y **Ctrl+V** pega un
-  bloque entero copiado de Excel. Si lo pegado no cabe, la cuadricula **crece**:
-  nunca se pierde una fila.
+- Botones **Copiar**, **Pegar** y **Copiar tabla** para quien no use atajos.
+  Lo copiado se pega en Excel como celdas y en Gmail u Outlook como una tabla
+  con sus bordes.
+- **Ctrl+V** pega un bloque entero copiado de Excel, aunque no se haya elegido
+  ninguna casilla antes. Si lo pegado no cabe, la cuadricula **crece**: nunca
+  se pierde una fila. Lo copiado de un PDF o de una pantalla (con espacios en
+  vez de tabuladores) tambien se reparte por columnas.
 - **Supr** vacia las celdas sin tocar la estructura.
 - Se anaden y se quitan filas y columnas, se cambian los encabezados y se
   arrastra el borde de una columna para darle mas ancho.
@@ -283,13 +290,18 @@ ejemplos, no asignaciones de nadie.
 
 ### El flujo
 
-1. Eliges plantilla y rellenas fecha, turno y supervisor.
+1. Eliges plantilla. La **supervisora** (Paula Andrea Ochoa) y la **fecha de
+   hoy** ya vienen puestas; solo falta el turno.
 2. Escribes o pegas la planilla **en espanol**.
 3. Pulsas **Traducir y generar Excel en ingles**.
 4. El resultado aparece en la pestana *Resultado en ingles*, **tambien
    editable**: ahi se corrige cualquier traduccion antes de descargar.
 5. **Descargar Excel** genera el `.xlsx` con lo que hay en ese momento en la
    cuadricula en ingles, nunca con una respuesta anterior.
+
+La fecha cambia de orden al pasar al ingles: el 14/10/2026 en espanol sale
+como 10/14/2026, que es como se lee en Estados Unidos y como la trae el modelo
+de AVX. Sin eso, el 05/10 (5 de octubre) se leeria como 10 de mayo.
 
 Si cambias la entrada despues de traducir, el resultado queda marcado como
 **desactualizado** hasta que vuelvas a traducir. Y si corriges el resultado a

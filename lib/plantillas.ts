@@ -1,5 +1,5 @@
 import { FILAS_INICIALES, filaVacia, metaVacia } from "@/lib/planilla";
-import type { SheetDoc, SheetTemplateId } from "@/types";
+import type { SheetDoc, SheetMeta, SheetTemplateId } from "@/types";
 
 /**
  * Las plantillas de AVX, sacadas de MODELO_TABLAS_SALIDA_EN.xlsx.
@@ -170,13 +170,13 @@ export function buscarPlantilla(id: SheetTemplateId): Plantilla {
  * Las filas de ejemplo del modelo NO se copian: son datos de muestra, no
  * asignaciones de nadie.
  */
-export function crearPlanilla(id: SheetTemplateId): SheetDoc {
+export function crearPlanilla(id: SheetTemplateId, meta: Partial<SheetMeta> = {}): SheetDoc {
   const plantilla = buscarPlantilla(id);
 
   return {
     template: plantilla.id,
     title: plantilla.title,
-    meta: metaVacia(),
+    meta: { ...metaVacia(), ...meta },
     sections: plantilla.sections.map((bloque) => {
       const alto = bloque.rows ?? FILAS_INICIALES;
       const ancho = bloque.columns.length;
@@ -193,7 +193,21 @@ export function crearPlanilla(id: SheetTemplateId): SheetDoc {
   };
 }
 
-/** true si la planilla sigue igual que recien creada, sin nada escrito. */
+/**
+ * true si la tabla sigue igual que recien creada, sin nada escrito.
+ * La fecha, el turno y el supervisor no cuentan: son del dia, no de la
+ * plantilla, y se conservan al cambiar de una a otra.
+ */
 export function esPlantillaIntacta(doc: SheetDoc): boolean {
-  return JSON.stringify(doc) === JSON.stringify(crearPlanilla(doc.template));
+  const nueva = crearPlanilla(doc.template);
+  return (
+    doc.title === nueva.title && JSON.stringify(doc.sections) === JSON.stringify(nueva.sections)
+  );
+}
+
+/** La fecha de hoy como se escribe en espanol: 14/10/2026. */
+export function fechaDeHoy(fecha = new Date()): string {
+  const dia = `${fecha.getDate()}`.padStart(2, "0");
+  const mes = `${fecha.getMonth() + 1}`.padStart(2, "0");
+  return `${dia}/${mes}/${fecha.getFullYear()}`;
 }

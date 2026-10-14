@@ -75,12 +75,15 @@ function comoNumero(valor: string, columna: string): number | null {
 /**
  * Ancho de columna a partir de lo que tiene que caber.
  *
- * El encabezado pide cinco caracteres de mas: el boton del filtro se dibuja
- * dentro de la celda y, si no, se come el final del titulo.
+ * El encabezado pide sitio de mas: el boton del filtro se dibuja dentro de
+ * la celda y, si no, se come el final del titulo.
  */
 function anchoColumna(encabezado: string, celdas: string[]): number {
   const largoDatos = celdas.reduce((mayor, celda) => Math.max(mayor, celda.length), 0);
-  return Math.min(42, Math.max(10, encabezado.length + 5, largoDatos + 3));
+  // El titulo va en negrita (ocupa una cuarta parte mas) y centrado, asi que
+  // necesita su ancho mas el del boton a cada lado para no pisarlo.
+  const largoTitulo = Math.ceil(encabezado.length * 1.25) + 5;
+  return Math.min(42, Math.max(10, largoTitulo, largoDatos + 3));
 }
 
 /** Cuantas lineas ocupa un texto en una columna de ese ancho. */
@@ -94,12 +97,19 @@ function lineasQueOcupa(texto: string, ancho: number): number {
   return lineas;
 }
 
-/** Alineacion segun lo que lleva la celda: los datos cortos van centrados. */
-function alineacion(valor: string): "left" | "center" {
-  const texto = valor.trim();
-  if (!texto) return "center";
-  if (texto.length <= 10 && !/\s/.test(texto)) return "center";
-  return "left";
+/**
+ * Alineacion de una columna entera, segun lo que lleva.
+ *
+ * Se decide por columna y no por casilla: si no, en NOTES una nota corta
+ * ("None") quedaba centrada y la de al lado, larga, a la izquierda. Una
+ * columna con texto de verdad (nombres, notas) va a la izquierda; una de
+ * datos (matriculas, puertas, horas, estados) va centrada.
+ */
+function alineacionDeColumna(valores: string[]): "left" | "center" {
+  const conTexto = valores.some(
+    (valor) => /\p{Ll}/u.test(valor) && /\s/.test(valor.trim()),
+  );
+  return conTexto ? "left" : "center";
 }
 
 export async function downloadXlsx({
@@ -265,6 +275,9 @@ export async function downloadXlsx({
     });
 
     // --- Cuerpo ---
+    const alineaciones = bloque.columns.map((_, indice) =>
+      alineacionDeColumna(bloque.rows.map((datosFila) => datosFila[indice] ?? "")),
+    );
     bloque.rows.forEach((datosFila, indiceFila) => {
       fila += 1;
       const linea = hoja.getRow(fila);
@@ -301,7 +314,7 @@ export async function downloadXlsx({
           // pueden convertirse en numero ni en fecha.
           celda.value = valor;
           celda.alignment = {
-            horizontal: alineacion(valor),
+            horizontal: alineaciones[indiceColumna],
             vertical: "middle",
             wrapText: true,
           };

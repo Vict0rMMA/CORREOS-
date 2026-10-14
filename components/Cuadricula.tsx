@@ -3,24 +3,29 @@
 import {
   type ClipboardEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
+import { ClipboardPaste, Copy, PencilLine, Table2 } from "lucide-react";
+import { readClipboard, writeClipboardTable } from "@/lib/clipboard";
 import {
+  bloqueAHtml,
   borrarColumnas,
   borrarFilas,
   escribirCelda,
   escribirEncabezado,
   insertarColumna,
   insertarFila,
+  interpretarPegado,
   limpiarRango,
   ordenar,
   pegarEn,
-  interpretarPegado,
   rangoATexto,
+  seccionParaCopiar,
 } from "@/lib/planilla";
 import { cn } from "@/lib/utils";
 import type { SheetSection } from "@/types";
@@ -58,6 +63,13 @@ export interface CuadriculaProps {
    * `sello` cambia en cada peticion, para poder volver a la misma celda.
    */
   foco?: { fila: number; columna: number; sello: number } | null;
+  /**
+   * Pegar aunque no se haya tocado ninguna casilla: lo pegado entra en esta
+   * cuadricula. Solo una por pantalla puede tenerlo.
+   */
+  pegadoGlobal?: boolean;
+  /** Para avisar de lo que paso al copiar o pegar. */
+  onMensaje?: (texto: string, tipo?: "success" | "info" | "error") => void;
   ariaLabel: string;
 }
 
@@ -94,6 +106,8 @@ export function Cuadricula({
   avisos,
   readOnly = false,
   foco = null,
+  pegadoGlobal = false,
+  onMensaje,
   ariaLabel,
 }: CuadriculaProps) {
   /** Celda con el foco. */
@@ -273,11 +287,15 @@ export function Cuadricula({
 
     if (mod && evento.key.toLowerCase() === "c") {
       evento.preventDefault();
-      const texto =
-        seleccion.fila1 === FILA_ENCABEZADO
-          ? seccion.columns.slice(seleccion.col1, seleccion.col2 + 1).join("\t")
-          : rangoATexto(seccion, seleccion);
-      void navigator.clipboard?.writeText(texto).catch(() => undefined);
+      void copiarSeleccion();
+      return;
+    }
+
+    // Ctrl + A marca toda la tabla, para copiarla de una vez.
+    if (mod && evento.key.toLowerCase() === "a") {
+      evento.preventDefault();
+      setActiva({ fila: 0, columna: 0 });
+      setExtremo({ fila: alto - 1, columna: ancho - 1 });
       return;
     }
 
@@ -288,53 +306,159 @@ export function Cuadricula({
     }
   };
 
-  /** Pegar: el bloque entra desde la celda activa y la cuadricula crece. */
+  /**
+   * Pega un texto desde la celda activa; la cuadricula crece si hace falta.
+   * Lo usan Ctrl + V, el boton Pegar y el pegado sin casilla elegida.
+   */
+  const pegarTexto = useCallback(
+    (texto: string) => {
+      if (readOnly || !texto) return;
+      const bloque = interpretarPegado(texto, seccion.columns);
+      if (bloque.length === 0) return;
+
+      if (activa.fila === FILA_ENCABEZADO) {
+        // Pegado sobre los encabezados: la primera linea renombra columnas y
+        // el resto baja a las filas.
+        let siguiente = seccion;
+        bloque[0].forEach((nombre, desplazamiento) => {
+          const columna = activa.columna + desplazamiento;
+          if (columna < siguiente.columns.length) {
+            siguiente = escribirEncabezado(siguiente, columna, nombre);
+          } else {
+            siguiente = insertarColumna(siguiente, siguiente.columns.length, nombre);
+          }
+        });
+        if (bloque.length > 1) {
+          siguiente = pegarEn(siguiente, 0, activa.columna, bloque.slice(1)).seccion;
+        }
+        onChange(siguiente);
+        return;
+      }
+
+      const { seccion: actualizada, hasta } = pegarEn(
+        seccion,
+        activa.fila,
+        activa.columna,
+        bloque,
+      );
+      onChange(actualizada);
+      setExtremo({ fila: hasta.fila, columna: hasta.columna });
+      onMensaje?.(
+        bloque.length === 1
+          ? "Pegado"
+          : `Pegadas ${bloque.length} filas`,
+        "success",
+      );
+    },
+    [activa, onChange, onMensaje, readOnly, seccion],
+  );
+
   const alPegar = (evento: ClipboardEvent<HTMLDivElement>) => {
     if (readOnly) return;
     const texto = evento.clipboardData.getData("text/plain");
     if (!texto) return;
-    evento.preventDefault();
 
-    const bloque = interpretarPegado(texto, seccion.columns);
-    if (bloque.length === 0) return;
-
-    if (activa.fila === FILA_ENCABEZADO) {
-      // Pegado sobre los encabezados: la primera linea renombra columnas y el
-      // resto baja a las filas.
-      let siguiente = seccion;
-      bloque[0].forEach((nombre, desplazamiento) => {
-        const columna = activa.columna + desplazamiento;
-        if (columna < siguiente.columns.length) {
-          siguiente = escribirEncabezado(siguiente, columna, nombre);
-        } else {
-          siguiente = insertarColumna(siguiente, siguiente.columns.length, nombre);
-        }
-      });
-      if (bloque.length > 1) {
-        const resto = pegarEn(siguiente, 0, activa.columna, bloque.slice(1));
-        siguiente = resto.seccion;
-      }
-      onChange(siguiente);
+    if (editando) {
+      // Una palabra suelta se pega dentro de la casilla que se esta
+      // escribiendo. Pero un bloque copiado de Excel (con tabuladores o con
+      // varias lineas) se reparte por la tabla: si no, la tabla entera caia
+      // dentro de una sola casilla.
+      const esBloque = /[\t\n]/.test(texto.replace(/\r?\n+$/, ""));
+      if (!esBloque) return;
+      evento.preventDefault();
+      setEditando(null);
+      pegarTexto(texto);
+      enfocar(activa);
       return;
     }
 
-    const { seccion: actualizada, hasta } = pegarEn(
-      seccion,
-      activa.fila,
-      activa.columna,
-      bloque,
-    );
-    onChange(actualizada);
-    setExtremo({ fila: hasta.fila, columna: hasta.columna });
+    evento.preventDefault();
+    pegarTexto(texto);
   };
 
-  // --- raton ---
+  // Pegar sin haber tocado ninguna casilla: entra donde esta la seleccion
+  // (al principio, la primera casilla). Si el foco esta en un campo de texto
+  // o en otra cuadricula, el pegado es suyo y aqui no se toca.
+  useEffect(() => {
+    if (!pegadoGlobal || readOnly) return;
+    const alPegarFuera = (evento: globalThis.ClipboardEvent) => {
+      const destino = evento.target as HTMLElement | null;
+      if (destino?.closest?.("input, textarea, select, [contenteditable='true'], [role='grid']")) {
+        return;
+      }
+      const texto = evento.clipboardData?.getData("text/plain");
+      if (!texto) return;
+      evento.preventDefault();
+      pegarTexto(texto);
+    };
+    document.addEventListener("paste", alPegarFuera);
+    return () => document.removeEventListener("paste", alPegarFuera);
+  }, [pegadoGlobal, pegarTexto, readOnly]);
+
+  /** Boton Pegar: lee el portapapeles, si el navegador lo deja. */
+  const pegarDesdeBoton = async () => {
+    const texto = await readClipboard();
+    if (texto === null) {
+      onMensaje?.("Tu navegador no deja pegar con el botón: usa Ctrl + V", "info");
+      return;
+    }
+    if (!texto.trim()) {
+      onMensaje?.("No hay nada copiado", "info");
+      return;
+    }
+    pegarTexto(texto);
+  };
+
+  /** Copia lo marcado: se pega en Excel como celdas y en un correo como tabla. */
+  const copiarSeleccion = async () => {
+    const texto =
+      seleccion.fila1 === FILA_ENCABEZADO
+        ? seccion.columns.slice(seleccion.col1, seleccion.col2 + 1).join("\t")
+        : rangoATexto(seccion, seleccion);
+    const filas = texto.split("\n").map((linea) => linea.split("\t"));
+    const ok = await writeClipboardTable(texto, bloqueAHtml(null, filas));
+    const celdas = (seleccion.fila2 - Math.max(0, seleccion.fila1) + 1) *
+      (seleccion.col2 - seleccion.col1 + 1);
+    onMensaje?.(
+      ok ? (celdas === 1 ? "Copiado" : `Copiadas ${celdas} casillas`) : "No se pudo copiar",
+      ok ? "success" : "error",
+    );
+  };
+
+  /** Copia la tabla entera con sus encabezados. */
+  const copiarTabla = async () => {
+    const { texto, html } = seccionParaCopiar(seccion);
+    const ok = await writeClipboardTable(texto, html);
+    onMensaje?.(
+      ok ? "Tabla copiada: pégala en Excel o en el correo" : "No se pudo copiar",
+      ok ? "success" : "error",
+    );
+  };
+
+  // --- raton y dedo ---
+  /** Si la casilla tocada ya era la activa, y con que se toco. */
+  const toque = useRef<{ yaActiva: boolean; tipo: string }>({ yaActiva: false, tipo: "mouse" });
+
   const alBajarPuntero = (celda: Celda) => (evento: PointerEvent<HTMLElement>) => {
     if (evento.button !== 0) return;
+    toque.current = {
+      yaActiva: activa.fila === celda.fila && activa.columna === celda.columna,
+      tipo: evento.pointerType,
+    };
     confirmar();
     arrastrando.current = true;
     setActiva(celda);
     if (!evento.shiftKey) setExtremo(celda);
+  };
+
+  /**
+   * Un toque basta para escribir: con el dedo siempre, y con el raton al
+   * volver a pulsar la casilla que ya estaba elegida. El doble clic sigue
+   * valiendo, pero quien no lo conoce no se queda atascado.
+   */
+  const alPulsar = (celda: Celda) => (evento: MouseEvent<HTMLElement>) => {
+    if (readOnly || evento.shiftKey || editando) return;
+    if (toque.current.tipo === "touch" || toque.current.yaActiva) empezarAEditar(celda);
   };
 
   const alEntrarPuntero = (celda: Celda) => () => {
@@ -393,23 +517,94 @@ export function Cuadricula({
   const filasMarcadas = seleccion.fila2 - filaActual + 1;
   const columnasMarcadas = seleccion.col2 - seleccion.col1 + 1;
 
+  // --- barra de escritura, encima de la tabla ---
+  // Como la barra de formulas de Excel: muestra lo que hay en la casilla
+  // elegida y deja escribirlo con espacio de sobra. En el celular es la forma
+  // segura de que salga el teclado, y una nota larga se edita entera.
+  const [barra, setBarra] = useState<{ celda: Celda; valor: string } | null>(null);
+  const campoBarra = useRef<HTMLInputElement>(null);
+
+  const guardarBarra = () => {
+    if (!barra) return;
+    const { celda, valor } = barra;
+    setBarra(null);
+    if (valor === valorDe(celda)) return;
+    onChange(
+      celda.fila === FILA_ENCABEZADO
+        ? escribirEncabezado(seccion, celda.columna, valor)
+        : escribirCelda(seccion, celda.fila, celda.columna, valor),
+    );
+  };
+
+  const nombreColumna = seccion.columns[activa.columna] || `columna ${activa.columna + 1}`;
+  const etiquetaBarra =
+    activa.fila === FILA_ENCABEZADO
+      ? `Título de la ${activa.columna + 1}.ª columna`
+      : `Fila ${activa.fila + 1} · ${nombreColumna}`;
+  const valorBarra =
+    barra && barra.celda.fila === activa.fila && barra.celda.columna === activa.columna
+      ? barra.valor
+      : valorDe(activa);
+
   return (
     <div className="flex flex-col gap-2">
       {readOnly ? null : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <BotonBarra onClick={acciones.anadirFila}>+ Fila</BotonBarra>
-          <BotonBarra onClick={acciones.borrarFila}>
-            − Fila{filasMarcadas > 1 ? `s (${filasMarcadas})` : ""}
-          </BotonBarra>
-          <span aria-hidden className="mx-1 h-4 w-px bg-line" />
-          <BotonBarra onClick={acciones.anadirColumna}>+ Columna</BotonBarra>
-          <BotonBarra onClick={acciones.borrarColumna}>
-            − Columna{columnasMarcadas > 1 ? `s (${columnasMarcadas})` : ""}
-          </BotonBarra>
-          <p className="ml-auto hidden text-[11px] text-muted sm:block">
-            Doble clic o Enter para escribir · Ctrl + V pega desde Excel
-          </p>
-        </div>
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <BotonBarra onClick={() => void copiarSeleccion()} titulo="Copiar lo marcado (Ctrl + C)">
+              <Copy aria-hidden className="size-3.5" />
+              Copiar
+            </BotonBarra>
+            <BotonBarra onClick={() => void pegarDesdeBoton()} titulo="Pegar en la casilla elegida (Ctrl + V)">
+              <ClipboardPaste aria-hidden className="size-3.5" />
+              Pegar
+            </BotonBarra>
+            <BotonBarra onClick={() => void copiarTabla()} titulo="Copiar toda la tabla, con sus títulos">
+              <Table2 aria-hidden className="size-3.5" />
+              Copiar tabla
+            </BotonBarra>
+            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+            <BotonBarra onClick={acciones.anadirFila}>+ Fila</BotonBarra>
+            <BotonBarra onClick={acciones.borrarFila}>
+              − Fila{filasMarcadas > 1 ? `s (${filasMarcadas})` : ""}
+            </BotonBarra>
+            <BotonBarra onClick={acciones.anadirColumna}>+ Columna</BotonBarra>
+            <BotonBarra onClick={acciones.borrarColumna}>
+              − Columna{columnasMarcadas > 1 ? `s (${columnasMarcadas})` : ""}
+            </BotonBarra>
+          </div>
+
+          <label className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-2 py-1.5 focus-within:border-accent">
+            <PencilLine aria-hidden className="ml-1 size-4 shrink-0 text-muted" />
+            <span className="shrink-0 rounded-md bg-surface-soft px-2 py-1 text-[11px] font-semibold text-ink-soft">
+              {etiquetaBarra}
+            </span>
+            <input
+              ref={campoBarra}
+              aria-label={`Escribir en ${etiquetaBarra}`}
+              value={valorBarra}
+              placeholder="Toca una casilla y escribe aquí"
+              onFocus={() => setBarra({ celda: activa, valor: valorDe(activa) })}
+              onChange={(evento) =>
+                setBarra({ celda: barra?.celda ?? activa, valor: evento.target.value })
+              }
+              onBlur={guardarBarra}
+              onKeyDown={(evento) => {
+                if (evento.key === "Enter") {
+                  evento.preventDefault();
+                  const celda = barra?.celda ?? activa;
+                  guardarBarra();
+                  mover({ fila: celda.fila + 1, columna: celda.columna });
+                } else if (evento.key === "Escape") {
+                  evento.preventDefault();
+                  setBarra(null);
+                  enfocar(activa);
+                }
+              }}
+              className="h-9 min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-muted/70"
+            />
+          </label>
+        </>
       )}
 
       <div
@@ -459,6 +654,7 @@ export function Cuadricula({
                     data-celda={`${FILA_ENCABEZADO}:${columna}`}
                     onPointerDown={alBajarPuntero(celda)}
                     onPointerEnter={alEntrarPuntero(celda)}
+                    onClick={alPulsar(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
                     style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                     className={cn(
@@ -535,7 +731,8 @@ export function Cuadricula({
                       data-celda={`${indiceFila}:${columna}`}
                       onPointerDown={alBajarPuntero(celda)}
                       onPointerEnter={alEntrarPuntero(celda)}
-                      onDoubleClick={() => empezarAEditar(celda)}
+                      onClick={alPulsar(celda)}
+                    onDoubleClick={() => empezarAEditar(celda)}
                       style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                       className={cn(
                         "border border-line p-0 align-middle outline-none",
@@ -635,15 +832,21 @@ function Editor({
 function BotonBarra({
   children,
   onClick,
+  titulo,
 }: {
   children: React.ReactNode;
   onClick: () => void;
+  titulo?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border border-line bg-surface-soft px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-accent/40 hover:text-accent"
+      title={titulo}
+      // Sin esto, pulsar el boton le quita el foco a la casilla y Copiar o
+      // Pegar ya no sabrian donde estaba la seleccion en el celular.
+      onPointerDown={(evento) => evento.preventDefault()}
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-surface-soft px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-accent/40 hover:text-accent"
     >
       {children}
     </button>

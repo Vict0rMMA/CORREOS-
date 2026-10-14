@@ -216,6 +216,8 @@ export function buildCellsPrompt(cells: SheetCell[], target: Lang): string {
     "RULES:",
     `- Return one entry per input entry, with the SAME "id". ${cells.length} in, ${cells.length} out.`,
     "- Translate the meaning, not word by word. Use the standard US aviation maintenance term.",
+    "- Every entry is Spanish text that MUST come back in English, even a single capitalized word: Puntual -> On time, Ninguna -> None, Pendiente -> Pending, Listo -> Done, Sin novedad -> No discrepancies.",
+    "- Use natural English word order, with modifiers before the noun: Cambio de turno tarde -> Afternoon shift change, Apoyo sala VIP -> VIP lounge support.",
     "- Keep it short: these are table cells, not sentences. No trailing periods on short entries.",
     "- Copy codes, tail numbers, gate numbers, times, dates and numbers character by character.",
     "- Keep people's names exactly as written, accents included.",

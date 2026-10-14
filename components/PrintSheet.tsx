@@ -43,7 +43,7 @@ export function PrintSheet({
   return (
     <div className="print-sheet hidden" aria-hidden>
       {/* La planilla se imprime apaisada, como el Excel y el PDF. */}
-      {planilla ? <style>{"@media print { @page { size: A4 landscape } }"}</style> : null}
+      {planilla ? <style>{"@media print { @page { size: A4 landscape; margin: 0 } }"}</style> : null}
 
       {includeLogo ? (
         /* eslint-disable-next-line @next/next/no-img-element */
