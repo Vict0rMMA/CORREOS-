@@ -367,6 +367,46 @@ la IA.
 En ningun sitio. La planilla vive mientras la pagina este abierta; no se guarda
 en el navegador ni en la nube. (La base de datos llegara mas adelante.)
 
+## Guardar en la nube (Supabase)
+
+Opcional. Sin configurar, la aplicacion funciona igual que siempre: los
+correos guardados viven en el navegador y la planilla mientras la pagina este
+abierta. Con Supabase:
+
+- **Las planillas se guardan solas** unos segundos despues de cada cambio
+  (junto al titulo se ve "Guardada · 10:42"). Si se vuelve el mismo dia, se
+  sigue donde se dejo, y en **Mis planillas** estan las anteriores para
+  reabrirlas.
+- **Los correos guardados se suben a la nube**, tambien los que ya estaban en
+  el navegador, asi no se pierden si se limpia.
+
+**Como esta protegido, sin inicio de sesion.** El navegador nunca habla con la
+base: lo hace el servidor de la aplicacion con la clave secreta, que no sale
+de Vercel. Las tablas tienen la seguridad por filas activada y ningun permiso
+publico, asi que con la clave publica no se puede leer ni borrar nada. Y
+borrar no borra: solo marca la fecha (`borrado_en`), y todo se recupera desde
+el panel de Supabase. Ni siquiera el servidor tiene permiso para borrar de
+verdad.
+
+**Para activarlo:**
+
+1. Crear las tablas: en Supabase, *SQL Editor*, pegar y ejecutar
+   `supabase/migrations/20261014120000_planillas_y_guardados.sql`.
+2. Poner dos variables, en `.env.local` y en Vercel (*Settings > Environment
+   Variables*), y volver a desplegar:
+
+   | Variable | Donde esta |
+   | --- | --- |
+   | `SUPABASE_URL` | *Project Settings > Data API > Project URL* |
+   | `SUPABASE_SECRET_KEY` | *Project Settings > API Keys > Secret keys* (`sb_secret_...`) |
+
+   La clave secreta nunca va en una variable `NEXT_PUBLIC_` ni se pega en un
+   chat.
+
+**Ojo con el plan gratuito:** Supabase pausa un proyecto gratuito tras una
+semana sin uso. Si pasa, la aplicacion sigue funcionando con lo del navegador
+y avisa de que no pudo guardar; basta con reactivarlo desde el panel.
+
 ## Dictado por voz
 
 Pulsa **Dictar** y habla con naturalidad. El texto va apareciendo **mientras
@@ -494,6 +534,8 @@ de `app/globals.css`: cambiando esas variables cambia la interfaz entera.
 app/
   api/process/route.ts   Procesa el texto y devuelve la respuesta en streaming
   api/planilla/route.ts  Traduce la planilla celda a celda y la revisa
+  api/planillas/         Guarda, abre y borra planillas en Supabase
+  api/guardados/         Los correos guardados en Supabase
   api/subject/route.ts   Sugiere 3 asuntos de correo
   layout.tsx             Tema, tipografia y metadatos
   page.tsx               Abre directamente el editor
@@ -507,6 +549,8 @@ lib/
   storage.ts             Preferencias, borrador e historial en localStorage
   clipboard.ts           Copiar y pegar con Clipboard API y respaldo
   planilla.ts            Modelo de la planilla y operaciones de la cuadricula
+  supabase.ts            Conexion con Supabase (solo en el servidor)
+  nube.ts                Lo que el navegador le pide a la nube, via /api
   plantillas.ts          Las plantillas de AVX (terminal, hangar, noches)
   tabla.ts               Mapas de traduccion fija y validacion celda a celda
   export/i18n.ts         Etiquetas y fechas de los documentos (es / en)

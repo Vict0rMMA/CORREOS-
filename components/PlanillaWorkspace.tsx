@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
+  Cloud,
+  CloudOff,
   FileDown,
+  FilePlus2,
   FileText,
   Languages,
   MoveRight,
@@ -14,6 +17,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { Cuadricula } from "@/components/Cuadricula";
+import { MisPlanillas } from "@/components/MisPlanillas";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
@@ -31,6 +35,14 @@ import {
   rehacer,
 } from "@/lib/planilla";
 
+import {
+  type PlanillaResumen,
+  abrirPlanilla,
+  borrarPlanilla,
+  guardarPlanilla,
+  listarPlanillas,
+  nuevoId,
+} from "@/lib/nube";
 import { PLANTILLAS, crearPlanilla, esPlantillaIntacta, fechaDeHoy } from "@/lib/plantillas";
 import type { Aviso } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
@@ -44,8 +56,15 @@ import type { SheetDoc, SheetSection, SheetTemplateId, SignatureDrawing } from "
  * antes de descargar el Excel, y si se vuelve a tocar la entrada el resultado
  * queda marcado como desactualizado.
  *
- * Nada de esto se guarda: la planilla vive mientras dura la sesion.
+ * Se guarda sola en la nube (Supabase) unos segundos despues de cada cambio,
+ * y si se vuelve el mismo dia se sigue donde se dejo. Sin nube configurada,
+ * la planilla vive mientras la pagina este abierta, como antes.
  */
+
+/** Espera desde el ultimo cambio hasta guardar. */
+const ESPERA_GUARDADO = 1500;
+
+type EstadoNube = "sin-nube" | "esperando" | "guardando" | "guardada" | "error";
 
 const GENERIC_ERROR = "No pudimos traducir la planilla. Revisa tu conexión o la configuración de IA.";
 
@@ -91,6 +110,158 @@ export function PlanillaWorkspace({
 
   const abortar = useRef<AbortController | null>(null);
 
+  // ----- la nube -----
+  /** Identificador de la planilla abierta: con el se guarda y se reabre. */
+  const [idPlanilla, setIdPlanilla] = useState<string>(() => nuevoId());
+  /** Lo guardado en la nube; null si la nube no esta disponible. */
+  const [misPlanillas, setMisPlanillas] = useState<PlanillaResumen[] | null>(null);
+  const [estadoNube, setEstadoNube] = useState<EstadoNube>("sin-nube");
+  const [guardadaEn, setGuardadaEn] = useState<string | null>(null);
+  /**
+   * false justo despues de abrir o crear una planilla: lo que se acaba de
+   * cargar no hace falta volver a guardarlo.
+   */
+  const hayCambios = useRef(false);
+
+  const refrescarLista = useCallback(async () => {
+    const lista = await listarPlanillas();
+    setMisPlanillas(lista);
+    return lista;
+  }, []);
+
+  /** Carga una planilla guardada en la pantalla. */
+  const cargar = useCallback((id: string, nuevaEntrada: SheetDoc, nuevaSalida: SheetDoc | null) => {
+    hayCambios.current = false;
+    setIdPlanilla(id);
+    setEntrada(iniciarHistorial(nuevaEntrada));
+    setSalida(nuevaSalida ? iniciarHistorial(nuevaSalida) : null);
+    setVista("es");
+    setAvisos([]);
+    setDesactualizado(false);
+    setAnchos({});
+  }, []);
+
+  // Al abrir: si hay una planilla de hoy a medias, se sigue con ella.
+  useEffect(() => {
+    let cancelado = false;
+    void (async () => {
+      const lista = await refrescarLista();
+      if (cancelado || !lista) return;
+      setEstadoNube("guardada");
+      const ultima = lista[0];
+      if (!ultima) return;
+      const deHoy = new Date(ultima.actualizadaEn).toDateString() === new Date().toDateString();
+      if (!deHoy) return;
+      const guardada = await abrirPlanilla(ultima.id);
+      if (cancelado || !guardada) return;
+      cargar(guardada.id, guardada.entrada, guardada.salida);
+      setGuardadaEn(guardada.actualizadaEn);
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [cargar, refrescarLista]);
+
+  /**
+   * Guarda ya lo que haya pendiente. Se llama antes de cambiar de planilla:
+   * si no, lo escrito en el ultimo segundo se perdia al saltar a otra.
+   */
+  const guardarYa = useCallback(async (): Promise<boolean> => {
+    if (misPlanillas === null || !hayCambios.current) return true;
+    // Una plantilla recien abierta, sin nada escrito, no se guarda.
+    if (!salida && esPlantillaIntacta(entrada.presente)) return true;
+
+    setEstadoNube("guardando");
+    const hora = await guardarPlanilla(idPlanilla, entrada.presente, salida?.presente ?? null);
+    if (!hora) {
+      setEstadoNube("error");
+      return false;
+    }
+    hayCambios.current = false;
+    setEstadoNube("guardada");
+    setGuardadaEn(hora);
+    void refrescarLista();
+    return true;
+  }, [entrada.presente, idPlanilla, misPlanillas, refrescarLista, salida]);
+
+  // Se guarda sola, un momento despues del ultimo cambio.
+  useEffect(() => {
+    if (misPlanillas === null || !hayCambios.current) return;
+    if (!salida && esPlantillaIntacta(entrada.presente)) return;
+
+    setEstadoNube("esperando");
+    const temporizador = window.setTimeout(() => void guardarYa(), ESPERA_GUARDADO);
+    return () => window.clearTimeout(temporizador);
+  }, [entrada.presente, guardarYa, misPlanillas, salida]);
+
+  // Si se pierde la conexion y vuelve, se reintenta lo pendiente.
+  useEffect(() => {
+    const alVolver = () => {
+      if (misPlanillas === null) void refrescarLista();
+      void guardarYa();
+    };
+    window.addEventListener("online", alVolver);
+    return () => window.removeEventListener("online", alVolver);
+  }, [guardarYa, misPlanillas, refrescarLista]);
+
+  // Si se cierra la pagina con algo sin guardar, se manda igual.
+  useEffect(() => {
+    const alSalir = () => {
+      if (!hayCambios.current || misPlanillas === null) return;
+      if (!salida && esPlantillaIntacta(entrada.presente)) return;
+      void fetch(`/api/planillas/${idPlanilla}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entrada: entrada.presente, salida: salida?.presente ?? null }),
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+    window.addEventListener("pagehide", alSalir);
+    return () => window.removeEventListener("pagehide", alSalir);
+  }, [entrada.presente, idPlanilla, misPlanillas, salida]);
+
+  /** Empieza una planilla nueva; la anterior queda guardada antes. */
+  const nuevaPlanilla = useCallback(
+    async (plantilla: SheetTemplateId = entrada.presente.template) => {
+      await guardarYa();
+      // La fecha, el turno y el supervisor son del dia: se quedan.
+      cargar(nuevoId(), crearPlanilla(plantilla, entrada.presente.meta), null);
+    },
+    [cargar, entrada.presente, guardarYa],
+  );
+
+  const abrirGuardada = useCallback(
+    async (id: string) => {
+      await guardarYa();
+      const guardada = await abrirPlanilla(id);
+      if (!guardada) {
+        toast("No pudimos abrir esa planilla", "error");
+        return;
+      }
+      cargar(guardada.id, guardada.entrada, guardada.salida);
+      setGuardadaEn(guardada.actualizadaEn);
+      setEstadoNube("guardada");
+      toast("Planilla abierta");
+    },
+    [cargar, guardarYa, toast],
+  );
+
+  const borrarGuardada = useCallback(
+    async (id: string) => {
+      const seguro = window.confirm("¿Borrar esta planilla de la lista?");
+      if (!seguro) return;
+      const ok = await borrarPlanilla(id);
+      if (!ok) {
+        toast("No pudimos borrarla", "error");
+        return;
+      }
+      if (id === idPlanilla) nuevaPlanilla();
+      await refrescarLista();
+      toast("Planilla borrada");
+    },
+    [idPlanilla, nuevaPlanilla, refrescarLista, toast],
+  );
+
   const doc = vista === "es" ? entrada.presente : (salida?.presente ?? entrada.presente);
   const historialActual = vista === "es" ? entrada : salida;
 
@@ -107,6 +278,7 @@ export function PlanillaWorkspace({
 
   // ----- editar -----
   const cambiarEntrada = useCallback((siguiente: SheetDoc) => {
+    hayCambios.current = true;
     setEntrada((historial) => cambiar(historial, siguiente));
     setSalida((actual) => {
       if (actual) setDesactualizado(true);
@@ -115,6 +287,7 @@ export function PlanillaWorkspace({
   }, []);
 
   const cambiarSalida = useCallback((siguiente: SheetDoc) => {
+    hayCambios.current = true;
     setSalida((historial) => (historial ? cambiar(historial, siguiente) : historial));
     // Si la persona corrige el resultado, esa es la version que vale.
     setAvisos([]);
@@ -141,23 +314,19 @@ export function PlanillaWorkspace({
 
   const cambiarPlantilla = useCallback(
     (id: SheetTemplateId) => {
-      // La de noches trae la flota y la numeracion puestas: "vacia" es que
-      // siga igual que recien creada, no que no tenga ni una celda escrita.
-      if (!esPlantillaIntacta(entrada.presente)) {
+      // Con la nube, la planilla que habia queda guardada en "Mis planillas"
+      // y no hace falta preguntar. Sin ella se perderia: ahi si se pregunta.
+      // (La de noches trae la flota y la numeracion puestas: "vacia" es que
+      // siga igual que recien creada, no que no tenga ni una celda escrita.)
+      if (misPlanillas === null && !esPlantillaIntacta(entrada.presente)) {
         const seguro = window.confirm(
           "Vas a cambiar de plantilla y la planilla que tienes escrita se pierde. ¿Seguimos?",
         );
         if (!seguro) return;
       }
-      // La fecha, el turno y el supervisor son del dia: se quedan.
-      setEntrada(iniciarHistorial(crearPlanilla(id, entrada.presente.meta)));
-      setSalida(null);
-      setAvisos([]);
-      setDesactualizado(false);
-      setVista("es");
-      setAnchos({});
+      void nuevaPlanilla(id);
     },
-    [entrada.presente],
+    [entrada.presente, misPlanillas, nuevaPlanilla],
   );
 
   // ----- deshacer y rehacer -----
@@ -165,11 +334,13 @@ export function PlanillaWorkspace({
   const puedeRehacer = (historialActual?.futuro.length ?? 0) > 0;
 
   const hacerDeshacer = useCallback(() => {
+    hayCambios.current = true;
     if (vista === "es") setEntrada((historial) => deshacer(historial));
     else setSalida((historial) => (historial ? deshacer(historial) : historial));
   }, [vista]);
 
   const hacerRehacer = useCallback(() => {
+    hayCambios.current = true;
     if (vista === "es") setEntrada((historial) => rehacer(historial));
     else setSalida((historial) => (historial ? rehacer(historial) : historial));
   }, [vista]);
@@ -225,6 +396,7 @@ export function PlanillaWorkspace({
         if (datos.avisos?.length) {
           setAvisos(datos.avisos);
           if (datos.doc) {
+            hayCambios.current = true;
             setSalida(iniciarHistorial(datos.doc));
             setVista("en");
           }
@@ -236,7 +408,8 @@ export function PlanillaWorkspace({
 
       if (!datos.doc) throw new Error(GENERIC_ERROR);
 
-      setSalida(iniciarHistorial(datos.doc));
+      hayCambios.current = true;
+            setSalida(iniciarHistorial(datos.doc));
       setDesactualizado(false);
       setVista("en");
       toast("Listo: revisa el resultado y descarga el Excel", "success");
@@ -372,6 +545,15 @@ export function PlanillaWorkspace({
           <Button
             size="sm"
             variant="quiet"
+            onClick={() => void nuevaPlanilla()}
+            title="Empezar otra planilla; esta queda guardada"
+            icon={<FilePlus2 aria-hidden className="size-4" />}
+          >
+            <span className="hidden sm:inline">Nueva</span>
+          </Button>
+          <Button
+            size="sm"
+            variant="quiet"
             onClick={hacerDeshacer}
             disabled={!puedeDeshacer}
             aria-label="Deshacer"
@@ -500,6 +682,7 @@ export function PlanillaWorkspace({
           <span className="eyebrow">
             {vista === "es" ? "se escribe en español" : "sale en inglés"}
           </span>
+          <EstadoGuardado estado={estadoNube} hora={guardadaEn} />
         </div>
 
         {doc.sections.map((seccion, indice) => (
@@ -588,11 +771,53 @@ export function PlanillaWorkspace({
 
         <p className="text-[11px] leading-relaxed text-muted">
           Las matrículas, las puertas, las horas y los códigos no pasan por la IA: se copian
-          tal cual y después se comprueba una por una que siguen igual. La planilla vive
-          mientras tengas la página abierta.
+          tal cual y después se comprueba una por una que siguen igual.
+          {misPlanillas === null
+            ? " La planilla vive mientras tengas la página abierta."
+            : " La planilla se guarda sola mientras trabajas."}
         </p>
       </div>
+
+      {misPlanillas ? (
+        <MisPlanillas
+          planillas={misPlanillas}
+          actual={idPlanilla}
+          onAbrir={(id) => void abrirGuardada(id)}
+          onBorrar={(id) => void borrarGuardada(id)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** Aviso pequeno junto al titulo: si lo escrito ya esta a salvo. */
+function EstadoGuardado({ estado, hora }: { estado: EstadoNube; hora: string | null }) {
+  if (estado === "sin-nube") return null;
+
+  const textos: Record<Exclude<EstadoNube, "sin-nube">, string> = {
+    esperando: "Cambios sin guardar…",
+    guardando: "Guardando…",
+    guardada: hora
+      ? `Guardada · ${new Date(hora).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}`
+      : "Guardada",
+    error: "No se pudo guardar · se reintenta solo",
+  };
+
+  const conProblema = estado === "error";
+  const Icono = conProblema ? CloudOff : Cloud;
+
+  return (
+    <span
+      aria-live="polite"
+      data-estado-nube={estado}
+      className={cn(
+        "ml-auto inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium",
+        conProblema ? "bg-warning-soft text-warning" : "bg-surface-soft text-muted",
+      )}
+    >
+      <Icono aria-hidden className="size-3.5" />
+      {textos[estado]}
+    </span>
   );
 }
 

@@ -27,6 +27,46 @@ export function metaVacia(): SheetMeta {
   return { date: "", shift: "", supervisor: "" };
 }
 
+const PLANTILLAS_VALIDAS = new Set(["terminal", "hangar", "nights", "custom"]);
+
+/**
+ * true si un valor tiene forma de planilla.
+ *
+ * Lo que llega a la nube viene del navegador y, sin inicio de sesion, puede
+ * mandarlo cualquiera: se comprueba la forma y se ponen topes antes de
+ * guardarlo.
+ */
+export function esPlanillaValida(valor: unknown): valor is SheetDoc {
+  if (typeof valor !== "object" || valor === null) return false;
+  const doc = valor as Record<string, unknown>;
+  if (typeof doc.template !== "string" || !PLANTILLAS_VALIDAS.has(doc.template)) return false;
+  if (typeof doc.title !== "string" || doc.title.length > 200) return false;
+
+  const meta = doc.meta as Record<string, unknown> | undefined;
+  if (!meta || typeof meta !== "object") return false;
+  for (const campo of ["date", "shift", "supervisor"]) {
+    if (typeof meta[campo] !== "string" || (meta[campo] as string).length > 200) return false;
+  }
+
+  if (!Array.isArray(doc.sections) || doc.sections.length === 0 || doc.sections.length > 12) {
+    return false;
+  }
+  return doc.sections.every((seccion) => {
+    if (typeof seccion !== "object" || seccion === null) return false;
+    const { title, columns, rows } = seccion as Record<string, unknown>;
+    if (typeof title !== "string") return false;
+    if (!Array.isArray(columns) || columns.length > 80) return false;
+    if (!columns.every((columna) => typeof columna === "string")) return false;
+    if (!Array.isArray(rows) || rows.length > 1000) return false;
+    return rows.every(
+      (fila) =>
+        Array.isArray(fila) &&
+        fila.length <= 80 &&
+        fila.every((celda) => typeof celda === "string" && celda.length <= 2000),
+    );
+  });
+}
+
 /** true si la planilla no tiene ni un dato escrito. */
 export function estaVacia(doc: SheetDoc): boolean {
   return doc.sections.every((seccion) =>

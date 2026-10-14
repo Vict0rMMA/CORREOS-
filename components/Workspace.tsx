@@ -25,6 +25,12 @@ import {
   writeClipboard,
 } from "@/lib/clipboard";
 import { APP_NAME, APP_TAGLINE, HISTORY_LIMIT, MAX_INPUT_CHARS } from "@/lib/config";
+import {
+  borrarGuardado,
+  borrarTodosLosGuardados,
+  listarGuardados,
+  subirGuardados,
+} from "@/lib/nube";
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import { cargarFirmaPorDefecto, hayFirmaDeSerie } from "@/lib/firma-por-defecto";
 import { downloadDocx } from "@/lib/export/docx";
@@ -123,7 +129,21 @@ export function Workspace() {
   useEffect(() => {
     const guardadas = loadPrefs();
     setPrefs(guardadas);
-    setHistory(loadHistory());
+    const locales = loadHistory();
+    setHistory(locales);
+
+    // Lo guardado en la nube manda. Lo que solo estaba en este navegador se
+    // sube la primera vez, para que no se pierda si se limpia el navegador.
+    void listarGuardados().then((enNube) => {
+      if (!enNube) return;
+      const ids = new Set(enNube.map((item) => item.id));
+      const soloLocales = locales.filter((item) => !ids.has(item.id));
+      if (soloLocales.length > 0) void subirGuardados(soloLocales);
+      const todos = [...enNube, ...soloLocales]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, HISTORY_LIMIT);
+      setHistory(saveHistory(todos));
+    });
     setSeccion(guardadas.seccion);
     setText(loadDraft());
     const guardada = loadSignatureImage();
@@ -196,6 +216,8 @@ export function Workspace() {
     (item: HistoryItem) => {
       // saveHistory devuelve lo que de verdad cupo en el navegador.
       setHistory((current) => saveHistory([item, ...current].slice(0, HISTORY_LIMIT)));
+      // Y a la nube, sin esperar: si no hay, queda en el navegador como antes.
+      void subirGuardados([item]);
     },
     [],
   );
@@ -553,11 +575,13 @@ export function Workspace() {
 
   const removeHistoryItem = useCallback((id: string) => {
     setHistory((current) => saveHistory(current.filter((item) => item.id !== id)));
+    void borrarGuardado(id);
   }, []);
 
   const removeHistory = useCallback(() => {
     clearStoredHistory();
     setHistory([]);
+    void borrarTodosLosGuardados();
     toast("Historial eliminado");
   }, [toast]);
 
