@@ -7,6 +7,7 @@ import {
   FileDown,
   FileText,
   Languages,
+  MoveRight,
   Printer,
   Redo2,
   Sheet as SheetIcon,
@@ -291,6 +292,24 @@ export function PlanillaWorkspace({
     [includeLogo, paraArchivo, signature, signatureImage, toast],
   );
 
+  /** Celda a la que saltar cuando se toca un aviso. */
+  const [salto, setSalto] = useState<{
+    seccion: number;
+    fila: number;
+    columna: number;
+    sello: number;
+  } | null>(null);
+
+  const irAlAviso = useCallback((aviso: Aviso) => {
+    setVista("en");
+    setSalto({
+      seccion: aviso.section,
+      fila: Math.max(0, aviso.row),
+      columna: aviso.column,
+      sello: Date.now(),
+    });
+  }, []);
+
   /** Las celdas marcadas, agrupadas por bloque, para pintarlas en rojo. */
   const marcadas = useMemo(() => {
     const mapa = new Map<number, Set<string>>();
@@ -419,30 +438,49 @@ export function PlanillaWorkspace({
 
       {/* ---------- avisos de validación ---------- */}
       {avisos.length > 0 ? (
-        <div className="rounded-2xl border border-danger/40 bg-danger/10 p-3 sm:p-4">
-          <p className="flex items-center gap-2 text-sm font-medium text-danger">
-            <AlertTriangle aria-hidden className="size-4" />
+        <div className="rounded-2xl border border-warning/40 bg-warning-soft/60 p-3 sm:p-4">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+            <AlertTriangle aria-hidden className="size-4 text-warning" />
             {avisos.length === 1
-              ? "Una celda no coincide con el original"
-              : `${avisos.length} celdas no coinciden con el original`}
+              ? "Hay una casilla por revisar"
+              : `Hay ${avisos.length} casillas por revisar`}
+          </h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+            La traducción cambió algo que no debía. Toca cada aviso para ir a la casilla y
+            escribe lo correcto; el aviso desaparece solo.
           </p>
-          <ul className="mt-2 flex flex-col gap-1 text-[13px] text-ink-soft">
+
+          <ul className="mt-3 flex flex-col gap-1.5">
             {avisos.slice(0, 8).map((aviso, indice) => (
               <li key={indice}>
-                <span className="font-medium text-ink">
-                  {aviso.row >= 0 ? `Fila ${aviso.row + 1}` : "Encabezado"}
-                  {aviso.columnLabel ? ` · ${aviso.columnLabel}` : ""}
-                </span>{" "}
-                — {aviso.message}
+                <button
+                  type="button"
+                  onClick={() => irAlAviso(aviso)}
+                  className="flex w-full items-start gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-left text-[13px] transition-colors hover:border-warning/60 hover:bg-surface-soft"
+                >
+                  <span className="shrink-0 rounded-lg bg-surface-soft px-2 py-0.5 text-[11px] font-semibold text-ink-soft">
+                    {aviso.row >= 0 ? `Fila ${aviso.row + 1}` : "Título"}
+                  </span>
+                  <span className="min-w-0 flex-1 text-ink-soft">
+                    {aviso.columnLabel ? (
+                      <span className="font-medium text-ink">{aviso.columnLabel}: </span>
+                    ) : null}
+                    {aviso.message}
+                  </span>
+                  <MoveRight aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
+                </button>
               </li>
             ))}
             {avisos.length > 8 ? (
-              <li className="text-muted">y {avisos.length - 8} más.</li>
+              <li className="px-1 text-[12px] text-muted">
+                y {avisos.length - 8} más, debajo en la tabla (están marcadas en rojo).
+              </li>
             ) : null}
           </ul>
-          <p className="mt-2 text-[12px] text-muted">
-            Corrige la celda en el resultado o cambia la entrada y vuelve a traducir. El
-            archivo no se descarga así.
+
+          <p className="mt-3 text-[12px] text-muted">
+            Mientras quede algún aviso, el Excel no se descarga: así nadie se lleva una
+            planilla con un dato cambiado.
           </p>
         </div>
       ) : null}
@@ -467,6 +505,7 @@ export function PlanillaWorkspace({
               anchos={anchosDe(indice, seccion)}
               onAnchosChange={(nuevos) => cambiarAnchos(indice, nuevos)}
               avisos={vista === "en" ? marcadas.get(indice) : undefined}
+              foco={salto && salto.seccion === indice ? salto : null}
               ariaLabel={
                 seccion.title || (vista === "es" ? "Planilla en español" : "Planilla en inglés")
               }

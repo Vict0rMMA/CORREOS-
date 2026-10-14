@@ -53,6 +53,11 @@ export interface CuadriculaProps {
   avisos?: Set<string>;
   /** Solo lectura: se usa para ensenar el original mientras se traduce. */
   readOnly?: boolean;
+  /**
+   * Celda a la que saltar desde fuera (al tocar un aviso).
+   * `sello` cambia en cada peticion, para poder volver a la misma celda.
+   */
+  foco?: { fila: number; columna: number; sello: number } | null;
   ariaLabel: string;
 }
 
@@ -88,6 +93,7 @@ export function Cuadricula({
   onAnchosChange,
   avisos,
   readOnly = false,
+  foco = null,
   ariaLabel,
 }: CuadriculaProps) {
   /** Celda con el foco. */
@@ -129,6 +135,19 @@ export function Cuadricula({
     },
     [alto, ancho, enfocar],
   );
+
+  // Salto desde un aviso: se selecciona la celda y se trae a la vista.
+  useEffect(() => {
+    if (!foco) return;
+    const destino = { fila: foco.fila, columna: foco.columna };
+    setActiva(destino);
+    setExtremo(destino);
+    const nodo = contenedor.current?.querySelector<HTMLElement>(
+      `[data-celda="${destino.fila}:${destino.columna}"]`,
+    );
+    nodo?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    nodo?.focus({ preventScroll: true });
+  }, [foco]);
 
   // Si la planilla encoge (se borraron filas), la seleccion se recoloca.
   useEffect(() => {

@@ -189,7 +189,9 @@ const FECHA = /^\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?$/;
 export function esCodigo(valor: string): boolean {
   const texto = valor.trim();
   if (!texto || /[a-zà-ÿ]/.test(texto)) return false;
-  if (!/^[A-Z0-9][A-Z0-9@#/.\- ]*$/.test(texto)) return false;
+  // Los dos puntos entran para que un rango de horas ("12:30 - 13:30") cuente
+  // como dato y no acabe en la IA.
+  if (!/^[A-Z0-9][A-Z0-9@#/.:\- ]*$/.test(texto)) return false;
   return /\d/.test(texto) || /[/\-#@]/.test(texto) || texto.replace(/\s/g, "").length <= 4;
 }
 
@@ -374,6 +376,8 @@ export function revisarPlanilla(
     }
 
     traducido.columns.forEach((columna, indiceColumna) => {
+      // Un encabezado de la plantilla es correcto por construccion.
+      if (traducirEncabezado(columna, destino) === columna.trim().toUpperCase()) return;
       const restos = restosEnEspanol(columna, destino);
       if (restos.length > 0) {
         avisos.push({
@@ -381,7 +385,7 @@ export function revisarPlanilla(
           row: -1,
           column: indiceColumna,
           columnLabel: columna,
-          message: `el encabezado quedó en español: ${restos.join(", ")}`,
+          message: `el título de la columna sigue en español: ${restos.join(", ")}`,
         });
       }
     });
@@ -390,64 +394,61 @@ export function revisarPlanilla(
       const filaTraducida = traducido.rows[indiceFila] ?? [];
 
       fila.forEach((celda, indiceColumna) => {
-        const resultado = filaTraducida[indiceColumna] ?? "";
         const original = celda.trim();
+        const salida = (filaTraducida[indiceColumna] ?? "").trim();
 
-        if (!original && resultado.trim()) {
+        const avisar = (message: string) => {
           avisos.push({
             section: indiceBloque,
             row: indiceFila,
             column: indiceColumna,
             columnLabel: nombre(indiceColumna),
-            message: "la celda estaba vacía y volvió con texto",
+            message,
           });
+        };
+
+        if (!original && salida) {
+          avisar(`aquí no habías escrito nada y ahora dice «${salida}»`);
           return;
         }
 
-        if (original && !resultado.trim()) {
-          avisos.push({
-            section: indiceBloque,
-            row: indiceFila,
-            column: indiceColumna,
-            columnLabel: nombre(indiceColumna),
-            message: `se perdió el contenido "${original}"`,
-          });
+        if (original && !salida) {
+          avisar(`se perdió «${original}»`);
           return;
         }
 
-        // Un dato protegido tiene que volver exactamente igual.
-        if (esDato(original) && original !== resultado.trim()) {
-          avisos.push({
-            section: indiceBloque,
-            row: indiceFila,
-            column: indiceColumna,
-            columnLabel: nombre(indiceColumna),
-            message: `"${original}" cambió a "${resultado.trim()}"`,
-          });
+        if (!original) return;
+
+        // Una matricula, una hora, un codigo o un nombre no se traducen: la
+        // unica forma correcta de volver es identicos. Y no se les mira el
+        // idioma, porque un codigo como "LA-4316" lleva dentro la palabra
+        // "LA" sin tener nada de espanol.
+        if (esDato(original) || pareceNombre(original)) {
+          if (original !== salida) {
+            avisar(`dice «${salida}» y en tu planilla dice «${original}»`);
+          }
           return;
         }
 
-        const perdidos = tokensPerdidos(original, resultado);
+        // Los valores de siempre tienen su traduccion fija.
+        const fijo = traducirValor(original, destino);
+        if (fijo) {
+          if (salida !== fijo) {
+            avisar(`dice «${salida}» y debería decir «${fijo}»`);
+          }
+          return;
+        }
+
+        // Lo que queda es texto que si paso por la IA.
+        const perdidos = tokensPerdidos(original, salida);
         if (perdidos.length > 0) {
-          avisos.push({
-            section: indiceBloque,
-            row: indiceFila,
-            column: indiceColumna,
-            columnLabel: nombre(indiceColumna),
-            message: `falta ${perdidos.join(", ")} en "${resultado.trim()}"`,
-          });
+          avisar(`falta ${perdidos.map((dato) => `«${dato}»`).join(", ")}`);
           return;
         }
 
-        const restos = restosEnEspanol(resultado, destino);
+        const restos = restosEnEspanol(salida, destino);
         if (restos.length > 0) {
-          avisos.push({
-            section: indiceBloque,
-            row: indiceFila,
-            column: indiceColumna,
-            columnLabel: nombre(indiceColumna),
-            message: `quedó en español: ${restos.join(", ")}`,
-          });
+          avisar(`sigue en español: ${restos.map((palabra) => `«${palabra}»`).join(", ")}`);
         }
       });
     });

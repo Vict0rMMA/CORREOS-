@@ -128,6 +128,69 @@ informe.comprobar(
 );
 
 // ---------------------------------------------------------------------------
+// 2b. Un turno entero de codigos no puede levantar ni un aviso
+// ---------------------------------------------------------------------------
+
+/**
+ * Las matriculas de la casa empiezan por LA, AV o CM. "LA-4316" lleva dentro
+ * la palabra "LA", y el revisor la daba por espanol sin traducir: ocho avisos
+ * en una planilla perfecta. Tampoco contaba como dato un rango de horas.
+ */
+const TURNO = {
+  template: "terminal",
+  title: "TERMINAL DAILY ASSIGNMENT",
+  meta: { date: "14/10/2026", shift: "Día", supervisor: "Paula Andrea Ochoa" },
+  sections: [
+    {
+      title: "",
+      columns: [
+        "EMPLEADO", "ALMUERZO", "AVIÓN", "PUERTA", "HORA ASIGNADO",
+        "AVIÓN 2", "PUERTA 2", "HORA ASIGNADO 2",
+      ],
+      rows: [
+        ["Carlos Gómez", "12:30 - 13:30", "AV-9240", "B4", "08:00", "LA-4316", "C12", "14:15"],
+        ["Sofía Ramírez", "13:00 - 14:00", "CM-3421", "A7", "09:30", "AV-7120", "B2", "15:00"],
+        ["Andrés Felipe Pérez", "12:00 - 13:00", "LA-1750", "C3", "08:45", "CM-8832", "A1", "13:22"],
+        ["Lucía Vargas", "14:00 - 15:00", "CM-7730", "A2", "09:00", "AV-6412", "B5", "16:00"],
+      ],
+    },
+  ],
+};
+
+const respuestaTurno = await fetch(`${URL_BASE}/api/planilla`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ doc: TURNO, target: "en" }),
+});
+const turno = await respuestaTurno.json();
+
+informe.comprobar(
+  "un turno de matrículas LA/AV/CM no levanta ningún aviso",
+  respuestaTurno.ok && !turno.avisos,
+  turno.avisos ? turno.avisos.slice(0, 3).map((a) => a.message).join(" | ") : "sin avisos",
+);
+
+if (turno.doc) {
+  const salida = turno.doc.sections[0].rows;
+  informe.comprobar(
+    "las matrículas vuelven intactas",
+    salida[0][5] === "LA-4316" && salida[2][2] === "LA-1750",
+    `${salida[0][5]} / ${salida[2][2]}`,
+  );
+  informe.comprobar(
+    "los rangos de almuerzo vuelven intactos",
+    salida[0][1] === "12:30 - 13:30",
+    salida[0][1],
+  );
+  informe.comprobar(
+    "los nombres conservan sus tildes",
+    salida[2][0] === "Andrés Felipe Pérez" && salida[3][0] === "Lucía Vargas",
+    `${salida[2][0]} / ${salida[3][0]}`,
+  );
+  informe.comprobar("y el turno se traduce", turno.doc.meta.shift === "DAY", turno.doc.meta.shift);
+}
+
+// ---------------------------------------------------------------------------
 // 3. Las plantillas en la aplicacion, y su Excel
 // ---------------------------------------------------------------------------
 
