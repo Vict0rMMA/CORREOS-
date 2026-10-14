@@ -52,6 +52,7 @@ export const TEXT_TYPES: { id: TextType; label: string }[] = [
   { id: "email", label: "Correo" },
   { id: "report", label: "Reporte" },
   { id: "message", label: "Mensaje" },
+  { id: "sheet", label: "Planilla" },
 ];
 
 export const ALL_ACTIONS = Object.keys(ACTION_LABELS) as Action[];

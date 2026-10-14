@@ -7,9 +7,11 @@ import { SALIDA, URL_BASE, abrirNavegador, crearInforme, esperarResultado, leerR
 
 const informe = crearInforme("Dictado por voz");
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // 1) La ruta /api/transcribe con un WAV de verdad (voz generada por Windows).
-const wav = `${SALIDA}/voz.wav`;
+// El audio vive junto a la prueba, no en la carpeta temporal de salida.
+const wav = fileURLToPath(new URL("voz.wav", import.meta.url));
 if (fs.existsSync(wav)) {
   const buffer = fs.readFileSync(wav);
   const form = new FormData();

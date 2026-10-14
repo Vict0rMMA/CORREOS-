@@ -8,7 +8,30 @@ export type Tone =
   | "academic"
   | "concise";
 
-export type TextType = "email" | "report" | "message";
+export type TextType = "email" | "report" | "message" | "sheet";
+
+/**
+ * Como tiene que venir la respuesta del modelo.
+ * "table" solo lo usa la planilla: en vez de texto corrido devuelve el JSON
+ * de la tabla, que es lo que luego se vuelca a Excel, Word o PDF.
+ */
+export type ResponseFormat = "text" | "table";
+
+/** Datos de cabecera de una planilla (los que van sobre la tabla). */
+export interface TableMeta {
+  date?: string;
+  shift?: string;
+  supervisor?: string;
+}
+
+/** Una planilla ya resuelta: lo que se descarga como Excel. */
+export interface TableData {
+  title: string;
+  meta: TableMeta;
+  columns: string[];
+  rows: string[][];
+  notes?: string;
+}
 
 /** Firma escaneada, recortada y con el fondo quitado. */
 export interface SignatureDrawing {
@@ -52,6 +75,13 @@ export interface ProcessRequest {
   textType: TextType;
   subject?: string;
   signature?: string;
+  /** Por defecto "text"; la planilla pide "table". */
+  format?: ResponseFormat;
+}
+
+/** Respuesta de /api/process cuando se pidio una tabla. */
+export interface TableResponse {
+  table: TableData;
 }
 
 /** Cuerpo de la peticion a /api/subject. */
@@ -78,6 +108,8 @@ export interface HistoryItem {
   textType: TextType;
   tone: Tone;
   createdAt: number;
+  /** Planilla resuelta, cuando el texto se proceso como tabla. */
+  table?: TableData;
 }
 
 export interface Prefs {
@@ -87,4 +119,6 @@ export interface Prefs {
   tone: Tone;
   textType: TextType;
   signature: string;
+  /** Pone el logo de American Airlines en Excel, Word, PDF e impresion. */
+  includeLogo: boolean;
 }

@@ -1,12 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, FileDown, FileText, Mail, PenLine, Plane, Printer, Type } from "lucide-react";
+import {
+  Check,
+  Copy,
+  FileDown,
+  FileText,
+  Mail,
+  PenLine,
+  Plane,
+  Printer,
+  Sheet,
+  Type,
+} from "lucide-react";
 import { Panel, PanelFooter, PanelHeader, PanelTitle } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { cn, countChars, countWords } from "@/lib/utils";
-import type { Status } from "@/types";
+import { labels } from "@/lib/export/i18n";
+import type { Lang, Status, TableData } from "@/types";
 
 export interface Route {
   from: string;
@@ -20,15 +32,23 @@ interface OutputPanelProps {
   route: Route | null;
   /** El resultado es identico al texto original. */
   unchanged: boolean;
+  /** Planilla, cuando el resultado vino en forma de tabla. */
+  table: TableData | null;
+  /** Idioma en el que salio el resultado. */
+  lang: Lang;
+  /** Hay algo que bajar a Excel: una planilla o un reporte numerado. */
+  canExportXlsx: boolean;
   onCopy: (plain: boolean) => Promise<boolean>;
   /** Copia el texto con la firma al final, listo para pegar en el correo. */
   onCopySigned: () => Promise<boolean>;
   onDownloadDocx: () => void;
   onDownloadPdf: () => void;
+  /** Solo tiene sentido con una planilla. */
+  onDownloadXlsx: () => void;
   onPrint: () => void;
   /** Abre el cliente de correo con el texto ya puesto. */
   onOpenMail: () => void;
-  busyExport: "docx" | "pdf" | null;
+  busyExport: "docx" | "pdf" | "xlsx" | null;
   className?: string;
 }
 
@@ -49,16 +69,77 @@ function FlightStrip({ flying }: { flying: boolean }) {
   );
 }
 
+/** La planilla tal y como va a salir: encabezado azul y filas alternas. */
+function TablePreview({ table, lang }: { table: TableData; lang: Lang }) {
+  const textos = labels(lang);
+  const datos = [
+    table.meta.date && `${textos.date}: ${table.meta.date}`,
+    table.meta.shift && `${textos.shift}: ${table.meta.shift}`,
+    table.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex flex-col gap-3">
+      {table.title ? (
+        <h3 className="title-serif text-[18px] text-ink">{table.title}</h3>
+      ) : null}
+      {datos.length > 0 ? (
+        <p className="text-[12px] font-medium text-muted">{datos.join(" · ")}</p>
+      ) : null}
+
+      <div className="scroll-slim -mx-1 overflow-x-auto px-1">
+        <table className="w-full min-w-max border-collapse text-[13px]">
+          <thead>
+            <tr>
+              {table.columns.map((columna, indice) => (
+                <th
+                  key={`${columna}-${indice}`}
+                  scope="col"
+                  className="whitespace-nowrap border border-[#2b4572] bg-[#1f3864] px-2.5 py-2 text-center text-[11px] font-semibold tracking-[0.04em] text-white"
+                >
+                  {columna}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((fila, indiceFila) => (
+              <tr key={indiceFila} className={indiceFila % 2 === 1 ? "bg-surface-soft" : undefined}>
+                {table.columns.map((_, indiceColumna) => (
+                  <td
+                    key={indiceColumna}
+                    className="border border-line px-2.5 py-1.5 align-middle text-ink-soft"
+                  >
+                    {fila[indiceColumna] ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {table.notes ? (
+        <p className="text-[12px] italic leading-relaxed text-muted">{table.notes}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function OutputPanel({
   output,
   status,
   error,
   route,
   unchanged,
+  table,
+  lang,
+  canExportXlsx,
   onCopy,
   onCopySigned,
   onDownloadDocx,
   onDownloadPdf,
+  onDownloadXlsx,
   onPrint,
   onOpenMail,
   busyExport,
@@ -121,7 +202,9 @@ export function OutputPanel({
       </PanelHeader>
 
       <div className="scroll-slim min-h-[190px] flex-1 overflow-y-auto px-4 py-4 sm:px-5 lg:min-h-[420px]">
-        {hasOutput ? (
+        {table ? (
+          <TablePreview table={table} lang={lang} />
+        ) : hasOutput ? (
           <p
             className={cn(
               "max-w-[68ch] whitespace-pre-wrap text-[16px] leading-[1.75] text-ink",
@@ -226,6 +309,19 @@ export function OutputPanel({
           >
             Correo
           </Button>
+          {canExportXlsx ? (
+            <Button
+              size="sm"
+              variant={table ? "secondary" : "quiet"}
+              onClick={onDownloadXlsx}
+              disabled={!hasOutput}
+              loading={busyExport === "xlsx"}
+              title="Descargar la planilla en Excel, con el logo y el formato de la empresa"
+              icon={<Sheet aria-hidden className="size-4" />}
+            >
+              Excel
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="quiet"

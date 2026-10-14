@@ -1,19 +1,34 @@
-import { documentFooter, longDate, parseSignature, splitClosing } from "@/lib/export/layout";
+import {
+  documentTitle,
+  isoDate,
+  labels,
+  longDate,
+  photoCaption,
+} from "@/lib/export/i18n";
+import { documentFooter, parseSignature, splitClosing } from "@/lib/export/layout";
+import { cargarLogo, medidaLogo } from "@/lib/export/logo";
 import { fitWidth } from "@/lib/images";
 import { downloadBlob, slugify, toLines } from "@/lib/utils";
 import type { ExportPayload } from "@/lib/export/docx";
+import type { TableData } from "@/types";
 
 const MARGIN = 64;
-const PAGE_WIDTH = 595.28; // A4 en puntos
-const PAGE_HEIGHT = 841.89;
+/** A4 en puntos. En la planilla se usa apaisado y se intercambian. */
+const A4_SHORT = 595.28;
+const A4_LONG = 841.89;
 const BODY_SIZE = 11;
 const LINE_HEIGHT = 16;
 const MAX_IMAGE_HEIGHT = 320;
 /** Espacio reservado abajo para el pie de pagina. */
 const FOOTER_SPACE = 44;
+/** Alto del logo en el encabezado, en puntos. */
+const LOGO_HEIGHT = 26;
 
 const GREY = 110;
 const RULE = 205;
+/** Azul marino de los encabezados de tabla. */
+const AZUL: [number, number, number] = [31, 56, 100];
+const FILA_ALTERNA = 242;
 
 /**
  * Genera un PDF real con jsPDF (fuente Helvetica, codificacion WinAnsi,
@@ -26,18 +41,32 @@ export async function downloadPdf({
   title,
   subject,
   body,
+  lang,
   images = [],
+  table = null,
   signature = "",
   signatureImage = null,
+  includeLogo = true,
 }: ExportPayload): Promise<void> {
   const { jsPDF } = await import("jspdf");
 
+  const textos = labels(lang);
   const firma = parseSignature(signature);
   const { body: cuerpo, closing } = firma
     ? splitClosing(body, firma.name)
     : { body, closing: null };
 
-  const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
+  // La planilla se lee mejor apaisada.
+  const apaisado = table !== null;
+  const doc = new jsPDF({
+    unit: "pt",
+    format: "a4",
+    orientation: apaisado ? "landscape" : "portrait",
+    compress: true,
+  });
+  const PAGE_WIDTH = apaisado ? A4_LONG : A4_SHORT;
+  const PAGE_HEIGHT = apaisado ? A4_SHORT : A4_LONG;
+
   const maxWidth = PAGE_WIDTH - MARGIN * 2;
   const bottom = PAGE_HEIGHT - MARGIN - FOOTER_SPACE;
   let y = MARGIN;
@@ -52,6 +81,14 @@ export async function downloadPdf({
     if (y + needed > bottom) newPage();
   };
 
+  // --- Logo ---
+  const logo = includeLogo ? await cargarLogo() : null;
+  if (logo) {
+    const medida = medidaLogo(logo, LOGO_HEIGHT);
+    doc.addImage(logo.dataUrl, "PNG", MARGIN, y - 4, medida.width, medida.height, undefined, "FAST");
+    y += medida.height + 12;
+  }
+
   // --- Encabezado ---
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
@@ -62,7 +99,7 @@ export async function downloadPdf({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(GREY);
-  doc.text(longDate(), PAGE_WIDTH - MARGIN, y, { align: "right" });
+  doc.text(longDate(lang), PAGE_WIDTH - MARGIN, y, { align: "right" });
   doc.setTextColor(0);
 
   y += 10;
@@ -75,30 +112,74 @@ export async function downloadPdf({
   if (subject) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.text("Asunto:", MARGIN, y);
-    const offset = doc.getTextWidth("Asunto: ");
+    doc.text(textos.subject, MARGIN, y);
+    const offset = doc.getTextWidth(`${textos.subject} `);
     doc.setFont("helvetica", "normal");
     const subjectLines = doc.splitTextToSize(subject, maxWidth - offset) as string[];
     doc.text(subjectLines, MARGIN + offset, y);
     y += LINE_HEIGHT * subjectLines.length + 14;
   }
 
-  // --- Cuerpo ---
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(BODY_SIZE);
+  if (table) {
+    // --- Planilla ---
+    const datos = [
+      table.meta.date && `${textos.date}: ${table.meta.date}`,
+      table.meta.shift && `${textos.shift}: ${table.meta.shift}`,
+      table.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+    ].filter(Boolean) as string[];
 
-  for (const rawLine of toLines(cuerpo)) {
-    if (!rawLine.trim()) {
-      y += LINE_HEIGHT * 0.6;
-      continue;
+    if (datos.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(68, 84, 106);
+      doc.text(datos.join("     "), MARGIN, y);
+      doc.setTextColor(0);
+      y += 20;
     }
-    const lines = doc.splitTextToSize(rawLine, maxWidth) as string[];
-    for (const line of lines) {
-      ensure(LINE_HEIGHT);
-      doc.text(line, MARGIN, y);
-      y += LINE_HEIGHT;
+
+    y = dibujarTabla(doc, table, {
+      x: MARGIN,
+      y,
+      width: maxWidth,
+      bottom,
+      onNewPage: () => {
+        doc.addPage();
+        return MARGIN;
+      },
+    });
+
+    if (table.notes) {
+      ensure(30);
+      y += 10;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9);
+      doc.setTextColor(GREY);
+      const notas = doc.splitTextToSize(`${textos.notes}: ${table.notes}`, maxWidth) as string[];
+      for (const linea of notas) {
+        ensure(12);
+        doc.text(linea, MARGIN, y);
+        y += 12;
+      }
+      doc.setTextColor(0);
     }
-    y += LINE_HEIGHT * 0.35;
+  } else {
+    // --- Cuerpo ---
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(BODY_SIZE);
+
+    for (const rawLine of toLines(cuerpo)) {
+      if (!rawLine.trim()) {
+        y += LINE_HEIGHT * 0.6;
+        continue;
+      }
+      const lines = doc.splitTextToSize(rawLine, maxWidth) as string[];
+      for (const line of lines) {
+        ensure(LINE_HEIGHT);
+        doc.text(line, MARGIN, y);
+        y += LINE_HEIGHT;
+      }
+      y += LINE_HEIGHT * 0.35;
+    }
   }
 
   // --- Bloque de firma ---
@@ -158,11 +239,7 @@ export async function downloadPdf({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setCharSpace(1);
-    doc.text(
-      images.length === 1 ? "ANEXO FOTOGRÁFICO" : "ANEXOS FOTOGRÁFICOS",
-      MARGIN,
-      y,
-    );
+    doc.text(images.length === 1 ? textos.annex : textos.annexes, MARGIN, y);
     doc.setCharSpace(0);
     y += 8;
     doc.setDrawColor(RULE);
@@ -172,9 +249,7 @@ export async function downloadPdf({
 
     images.forEach((image, index) => {
       const size = fitWidth(image, maxWidth, MAX_IMAGE_HEIGHT);
-      const caption = image.caption
-        ? `Foto ${index + 1}. ${image.caption}`
-        : `Foto ${index + 1}`;
+      const caption = photoCaption(index, image.caption, lang);
 
       // La foto y su pie viajan juntos: nunca se separan entre paginas.
       ensure(size.height + 26);
@@ -198,7 +273,7 @@ export async function downloadPdf({
 
   // --- Pie con numeracion, en todas las paginas ---
   const total = doc.getNumberOfPages();
-  const pie = documentFooter();
+  const pie = documentFooter(lang);
   for (let page = 1; page <= total; page += 1) {
     doc.setPage(page);
     const lineY = PAGE_HEIGHT - MARGIN - 18;
@@ -210,10 +285,120 @@ export async function downloadPdf({
     doc.setFontSize(8);
     doc.setTextColor(GREY);
     doc.text(pie, MARGIN, lineY + 12);
-    doc.text(`Página ${page} de ${total}`, PAGE_WIDTH - MARGIN, lineY + 12, { align: "right" });
+    doc.text(
+      `${textos.page} ${page} ${textos.of} ${total}`,
+      PAGE_WIDTH - MARGIN,
+      lineY + 12,
+      { align: "right" },
+    );
     doc.setTextColor(0);
   }
 
   doc.setProperties({ title: subject || title, creator: firma?.name ?? "" });
-  downloadBlob(doc.output("blob"), `${slugify(subject || title)}.pdf`);
+  const nombre = table
+    ? `${slugify(table.title, documentTitle("sheet", lang))}-${isoDate()}`
+    : slugify(subject || title);
+  downloadBlob(doc.output("blob"), `${nombre}.pdf`);
+}
+
+/**
+ * Dibuja la tabla y devuelve la y donde termina.
+ *
+ * Las columnas se reparten el ancho segun lo que tienen que mostrar, el texto
+ * se parte dentro de la celda y el encabezado se repite al cambiar de pagina.
+ */
+function dibujarTabla(
+  doc: import("jspdf").jsPDF,
+  table: TableData,
+  caja: {
+    x: number;
+    y: number;
+    width: number;
+    bottom: number;
+    onNewPage: () => number;
+  },
+): number {
+  const PADDING = 5;
+  const FUENTE = 8.5;
+  const INTERLINEA = 11;
+
+  // Reparto del ancho: cada columna pide segun su contenido, con un minimo.
+  const pesos = table.columns.map((nombre, indice) => {
+    const largos = table.rows.map((fila) => (fila[indice] ?? "").length);
+    const mayor = Math.max(nombre.length, ...largos, 1);
+    return Math.min(42, Math.max(7, mayor));
+  });
+  const suma = pesos.reduce((total, peso) => total + peso, 0);
+  const anchos = pesos.map((peso) => (peso / suma) * caja.width);
+
+  doc.setFontSize(FUENTE);
+
+  /** Reparte el texto de cada celda en lineas que caben en su columna. */
+  const partir = (fila: string[]) =>
+    anchos.map(
+      (ancho, indice) =>
+        doc.splitTextToSize(fila[indice] ?? "", ancho - PADDING * 2) as string[],
+    );
+
+  const alturaDe = (lineas: string[][]) =>
+    Math.max(18, Math.max(...lineas.map((celda) => celda.length)) * INTERLINEA + PADDING * 2);
+
+  let y = caja.y;
+
+  const encabezado = () => {
+    const lineas = partir(table.columns);
+    const alto = Math.max(22, alturaDe(lineas));
+
+    doc.setFillColor(AZUL[0], AZUL[1], AZUL[2]);
+    doc.rect(caja.x, y, caja.width, alto, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255);
+
+    let x = caja.x;
+    lineas.forEach((celda, indice) => {
+      const centro = x + anchos[indice] / 2;
+      celda.forEach((linea, nivel) => {
+        doc.text(linea, centro, y + PADDING + INTERLINEA * (nivel + 0.7), { align: "center" });
+      });
+      x += anchos[indice];
+    });
+
+    doc.setTextColor(0);
+    y += alto;
+  };
+
+  encabezado();
+
+  table.rows.forEach((fila, indiceFila) => {
+    const lineas = partir(fila);
+    const alto = alturaDe(lineas);
+
+    if (y + alto > caja.bottom) {
+      y = caja.onNewPage();
+      doc.setFontSize(FUENTE);
+      encabezado();
+    }
+
+    if (indiceFila % 2 === 1) {
+      doc.setFillColor(FILA_ALTERNA, FILA_ALTERNA, FILA_ALTERNA);
+      doc.rect(caja.x, y, caja.width, alto, "F");
+    }
+
+    doc.setFont("helvetica", "normal");
+    doc.setDrawColor(191);
+    doc.setLineWidth(0.4);
+
+    let x = caja.x;
+    lineas.forEach((celda, indice) => {
+      doc.rect(x, y, anchos[indice], alto);
+      celda.forEach((linea, nivel) => {
+        doc.text(linea, x + PADDING, y + PADDING + INTERLINEA * (nivel + 0.7));
+      });
+      x += anchos[indice];
+    });
+
+    y += alto;
+  });
+
+  return y;
 }

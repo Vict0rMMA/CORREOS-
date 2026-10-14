@@ -24,6 +24,9 @@ interface OptionsBarProps {
   signature: string;
   onSignatureChange: (signature: string) => void;
   signatureImage: SignatureDrawing | null;
+  /** Pone el logo de American Airlines en Excel, Word, PDF e impresion. */
+  includeLogo: boolean;
+  onIncludeLogoChange: (value: boolean) => void;
 }
 
 export function OptionsBar({
@@ -43,9 +46,12 @@ export function OptionsBar({
   signature,
   onSignatureChange,
   signatureImage,
+  includeLogo,
+  onIncludeLogoChange,
 }: OptionsBarProps) {
   const isEmail = textType === "email";
   const isReport = textType === "report";
+  const isSheet = textType === "sheet";
 
   return (
     <div className="glass print-hidden rounded-2xl border border-line p-3 shadow-panel sm:p-4">
@@ -129,6 +135,25 @@ Cargo (opcional)`}
       ) : null}
 
       {isReport ? <ImageAttachments images={images} onChange={onImagesChange} /> : null}
+
+      {isSheet ? (
+        <p className="mt-3 border-t border-line pt-3 text-[11px] leading-relaxed text-muted">
+          Copia la tabla desde Excel y pégala tal cual: las matrículas, las puertas y las
+          horas se respetan exactamente y solo se traduce el texto. También sirve escribirla
+          a mano; el resultado se descarga en{" "}
+          <strong className="font-medium text-ink-soft">Excel</strong>, Word o PDF.
+        </p>
+      ) : null}
+
+      <label className="mt-3 flex cursor-pointer items-center gap-2.5 border-t border-line pt-3 text-[13px] text-ink-soft">
+        <input
+          type="checkbox"
+          checked={includeLogo}
+          onChange={(event) => onIncludeLogoChange(event.target.checked)}
+          className="size-4 accent-accent"
+        />
+        Incluir el logo de American Airlines en los documentos
+      </label>
 
       {isEmail && subjectOptions.length > 0 ? (
         <div className="animate-rise mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">

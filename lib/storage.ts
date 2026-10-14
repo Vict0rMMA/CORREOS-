@@ -13,6 +13,7 @@ export const DEFAULT_PREFS: Prefs = {
   tone: "professional",
   textType: "email",
   signature: DEFAULT_SIGNATURE,
+  includeLogo: true,
 };
 
 function read<T>(key: string): T | null {
@@ -51,6 +52,7 @@ export function loadPrefs(): Prefs {
       typeof merged.signature === "string" && merged.signature.trim()
         ? merged.signature
         : DEFAULT_SIGNATURE,
+    includeLogo: merged.includeLogo !== false,
   };
 }
 

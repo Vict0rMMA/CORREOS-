@@ -7,6 +7,9 @@
  * bloque de firma con linea, nombre y cargo.
  */
 
+import { longDate } from "@/lib/export/i18n";
+import type { Lang } from "@/types";
+
 export interface SignatureBlock {
   /** Nombre de quien firma, en negrita. */
   name: string;
@@ -25,21 +28,12 @@ export function parseSignature(signature: string): SignatureBlock | null {
   return { name: lines[0], details: lines.slice(1) };
 }
 
-/** Fecha larga en espanol: "27 de septiembre de 2026". */
-export function longDate(date = new Date()): string {
-  return date.toLocaleDateString("es-CO", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
 /**
- * Pie de pagina comun: solo la fecha.
+ * Pie de pagina comun: solo la fecha, en el idioma del documento.
  * Son documentos formales, no llevan la marca de la aplicacion.
  */
-export function documentFooter(): string {
-  return longDate();
+export function documentFooter(lang: Lang): string {
+  return longDate(lang);
 }
 
 /**

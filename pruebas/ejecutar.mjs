@@ -16,11 +16,13 @@ import { URL_BASE } from "./comun.mjs";
 const PRUEBAS = [
   { archivo: "interfaz.mjs", nombre: "Interfaz y tamanos", gasta: false },
   { archivo: "guardados.mjs", nombre: "Guardados y buscador", gasta: false },
+  { archivo: "idioma-documentos.mjs", nombre: "Documentos: idioma, logo y Excel", gasta: false },
   { archivo: "celular.mjs", nombre: "Celular e instalacion", gasta: true },
   { archivo: "tipos.mjs", nombre: "Tipos de texto", gasta: true },
   { archivo: "traduccion.mjs", nombre: "Idiomas y traduccion", gasta: true },
   { archivo: "encadenado.mjs", nombre: "Encadenado de acciones", gasta: true },
   { archivo: "documentos.mjs", nombre: "Word y PDF", gasta: true },
+  { archivo: "planilla.mjs", nombre: "Planilla y Excel", gasta: true },
   { archivo: "firma.mjs", nombre: "Firma escaneada", gasta: true },
   { archivo: "voz.mjs", nombre: "Dictado por voz", gasta: true },
 ];

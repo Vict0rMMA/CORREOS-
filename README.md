@@ -2,15 +2,18 @@
 
 Herramienta web para **redactar, corregir y traducir** correos y textos entre espanol e ingles.
 Escribes o pegas un texto, eliges una accion y obtienes el resultado listo para copiar,
-descargar en Word o PDF, o imprimir.
+descargar en Word, PDF o Excel, o imprimir.
 
 - **Dictado por voz**: hablas y el texto se escribe solo, en vivo.
 - **Reportes con fotos**: adjunta imagenes con pie de foto y salen en el Word, el PDF y la impresion.
+- **Planillas a Excel**: pegas la tabla del turno y sale un `.xlsx` con el logo de
+  American Airlines, listo para imprimir. Las matriculas, las horas y los codigos
+  se conservan exactos.
 - Correccion de ortografia, gramatica, puntuacion y redaccion.
 - Traduccion natural (no literal) espanol <-> ingles.
 - Mejora de redaccion conservando la intencion original.
 - Generacion de correos completos a partir de una idea corta.
-- Seis tonos y siete tipos de texto.
+- Seis tonos y cuatro tipos de texto: correo, reporte, mensaje y planilla.
 - Sugerencia de asuntos para correos.
 - Acciones rapidas de un clic, historial local y atajos de teclado.
 - Interfaz oscura, disenada para movil, tablet y escritorio.
@@ -217,6 +220,14 @@ El Word, el PDF y la impresion usan el mismo formato de documento formal:
 - **Pie de pagina** con la fecha y "Pagina X de Y". Los documentos no llevan
   ninguna marca de la aplicacion, y el autor del archivo es quien firma.
 - **Anexo fotografico** al final cuando el tipo es Reporte.
+- **Logo de American Airlines** arriba. Se quita con la casilla *Incluir el logo
+  de American Airlines en los documentos*. Si el archivo del logo no se puede
+  leer, el documento se descarga igual, solo que sin el.
+
+**El documento se escribe en el idioma del resultado.** Si el texto salio en
+ingles, el documento dice "Subject:", "Page 1 of 1" y "October 13, 2026"; si
+salio en espanol, "Asunto:", "Pagina 1 de 1" y "13 de octubre de 2026". Las
+etiquetas estan todas en `lib/export/i18n.ts`, en un solo sitio.
 
 Si el texto ya termina con la firma (un correo generado), no se repite: se
 reconoce, se retira del cuerpo y se vuelve a escribir con formato.
@@ -235,6 +246,65 @@ Elige **Reporte** en *Tipo de texto* y aparece el bloque de fotos:
   rotacion de las fotos de movil, asi el archivo no se dispara de tamano.
 - Se quedan en la pestana mientras trabajas; **no se guardan** al cerrar la pagina
   (el historial local solo guarda texto).
+
+## Planillas y Excel
+
+Elige **Planilla** en *Tipo de texto* cuando lo que tienes es una tabla:
+asignaciones del turno, novedades, control de aeronaves.
+
+Copia la tabla desde Excel y pegala tal cual. La aplicacion la lee en el
+navegador y **solo manda a la IA las celdas con texto de verdad**:
+
+- Las **matriculas, puertas, horas, fechas, numeros y codigos** (`N123AV`, `B4`,
+  `07:30`, `MEL-21`, `P-0`) no pasan por la IA: se copian caracter a caracter.
+- Los **nombres de persona** tampoco: `J. Perez` sale igual, con su tilde.
+- Los **encabezados conocidos** se traducen con una tabla fija, sin IA:
+  EMPLEADO -> EMPLOYEE, ALMUERZO -> LUNCH, AVION -> A/C, PUERTA -> GATE,
+  HORA ASIGNADO -> ASSGN @, HORA SALIDA -> ETD, ESTACION -> STA,
+  TRIPULACION -> CRW, TECNICO AVX -> AVX TECH, FALLA DIFERIDA -> MEL/NEF,
+  FECHA -> DATE, TURNO -> SHIFT, NOTAS -> NOTES. El mapa esta en `lib/tabla.ts`
+  y se amplia anadiendo una linea.
+- Si la tabla no trae ni una celda de texto, **no se llama a la IA**: la
+  respuesta tarda unos 30 ms.
+
+Tambien sirve escribir el turno a mano: si el texto no es una tabla, el modelo
+lo organiza en columnas (y si no hay nada que tabular, usa `#` y `Description`).
+
+### Antes de entregar nada, se revisa
+
+Cada respuesta pasa por un control antes de llegar a la pantalla:
+
+1. Se sacan del texto original los **datos criticos** (horas, codigos y numeros)
+   y se comprueba que **todos** siguen en el resultado.
+2. Se busca **espanol que haya quedado sin traducir**.
+3. Se comprueba que la tabla tiene la forma correcta y que todas las filas
+   tienen el mismo numero de celdas.
+
+Si algo falla se reintenta **una vez**, diciendole al modelo exactamente que
+fallo. Si vuelve a fallar, la aplicacion **avisa con la lista de lo que no
+cuadra** en lugar de entregar una planilla con los datos cambiados.
+
+### El archivo .xlsx
+
+El boton **Excel** descarga un `.xlsx` de verdad (libreria `exceljs`):
+
+- Logo a la izquierda y titulo a la derecha en azul marino, con la fecha, el
+  turno y el supervisor debajo.
+- Encabezado azul `1F3864` con letra blanca, filas alternas, bordes finos y
+  texto ajustado.
+- Las **horas se guardan como hora** (`07:30` con formato `hh:mm`), asi se
+  pueden ordenar y restar en Excel. Las matriculas y los codigos se quedan como
+  texto para que Excel no los convierta en fechas ni en numeros.
+- Panel inmovilizado bajo el encabezado, autofiltro y anchos automaticos.
+- Preparado para imprimir: horizontal, ajustado a una pagina de ancho, con el
+  encabezado repetido y "Page X of Y" en el pie.
+- El archivo se llama `<titulo>-AAAA-MM-DD.xlsx`.
+
+Antes de descargarlo, el archivo **se vuelve a abrir y se comprueba** que sus
+filas y columnas son las mismas que las de la tabla.
+
+Un **Reporte** tambien se puede bajar a Excel: sale numerado en una tabla
+`#` / `Description`, un parrafo por fila, sin volver a llamar a la IA.
 
 ## Dictado por voz
 
@@ -324,9 +394,11 @@ npm run test:todo  # todas, incluidas las que llaman a la IA
 ```
 
 Las pruebas manejan un Chrome de verdad contra la aplicacion: escriben, tocan
-botones, descargan el Word y el PDF y miran lo que sale. Cubren la interfaz en
-cinco tamanos, el celular, los tipos de texto, la traduccion, el encadenado,
-los documentos, la firma escaneada, el buscador y el dictado.
+botones, descargan el Word, el PDF y el Excel y miran lo que sale (el `.xlsx`
+se vuelve a abrir con `exceljs` y el PDF se descomprime para leer su texto).
+Cubren la interfaz en cinco tamanos, el celular, los tipos de texto, la
+traduccion, el encadenado, los documentos y su idioma, el logo, la planilla y
+su Excel, la firma escaneada, el buscador y el dictado.
 
 Si Chrome no esta en la ruta habitual se indica con `PAULA_CHROME`, y para
 probar contra otra direccion, con `PAULA_URL`.
@@ -361,8 +433,12 @@ lib/
   detect-language.ts     Deteccion local de idioma
   storage.ts             Preferencias, borrador e historial en localStorage
   clipboard.ts           Copiar y pegar con Clipboard API y respaldo
+  tabla.ts               Planillas: leer TSV, mapa de encabezados y validador
+  export/i18n.ts         Etiquetas y fechas de los documentos (es / en)
+  export/logo.ts         Logo de American Airlines, leido una sola vez
   export/docx.ts         Generacion de .docx real (libreria docx)
   export/pdf.ts          Generacion de PDF real (jsPDF)
+  export/xlsx.ts         Generacion de .xlsx real (exceljs)
 types/                   Tipos compartidos
 ```
 

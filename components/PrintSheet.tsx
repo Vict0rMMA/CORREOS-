@@ -1,35 +1,93 @@
-import { longDate, parseSignature, splitClosing } from "@/lib/export/layout";
-import type { ReportImage, SignatureDrawing } from "@/types";
+import { labels, longDate, photoCaption } from "@/lib/export/i18n";
+import { parseSignature, splitClosing } from "@/lib/export/layout";
+import { LOGO_PATH } from "@/lib/export/logo";
+import type { Lang, ReportImage, SignatureDrawing, TableData } from "@/types";
 
 /** Solo visible al imprimir: hoja limpia con titulo, asunto, contenido y fotos. */
 export function PrintSheet({
   title,
   subject,
   body,
+  lang,
   images,
+  table = null,
   signature = "",
   signatureImage = null,
+  includeLogo = true,
 }: {
   title: string;
   subject?: string;
   body: string;
+  /** Idioma del documento: el mismo en el que salio el resultado. */
+  lang: Lang;
   images?: ReportImage[];
+  table?: TableData | null;
   signature?: string;
   signatureImage?: SignatureDrawing | null;
+  includeLogo?: boolean;
 }) {
+  const textos = labels(lang);
   const firma = parseSignature(signature);
   const { body: cuerpo, closing } = firma
     ? splitClosing(body, firma.name)
     : { body, closing: null };
 
+  const datos = [
+    table?.meta.date && `${textos.date}: ${table.meta.date}`,
+    table?.meta.shift && `${textos.shift}: ${table.meta.shift}`,
+    table?.meta.supervisor && `${textos.supervisor}: ${table.meta.supervisor}`,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="print-sheet hidden" aria-hidden>
+      {/* La planilla se imprime apaisada, como el Excel y el PDF. */}
+      {table ? <style>{"@media print { @page { size: A4 landscape } }"}</style> : null}
+
+      {includeLogo ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img className="print-logo" src={LOGO_PATH} alt="" />
+      ) : null}
+
       <div className="print-head">
         <h1>{title.toUpperCase()}</h1>
-        <span>{longDate()}</span>
+        <span>{longDate(lang)}</span>
       </div>
-      {subject ? <p className="print-subject">Asunto: {subject}</p> : null}
-      <div style={{ whiteSpace: "pre-wrap" }}>{cuerpo}</div>
+      {subject ? (
+        <p className="print-subject">
+          {textos.subject} {subject}
+        </p>
+      ) : null}
+
+      {table ? (
+        <>
+          {datos.length > 0 ? <p className="print-meta">{datos.join(" · ")}</p> : null}
+          <table className="print-table">
+            <thead>
+              <tr>
+                {table.columns.map((columna, indice) => (
+                  <th key={`${columna}-${indice}`}>{columna}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((fila, indiceFila) => (
+                <tr key={indiceFila}>
+                  {table.columns.map((_, indiceColumna) => (
+                    <td key={indiceColumna}>{fila[indiceColumna] ?? ""}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {table.notes ? (
+            <p className="print-notes">
+              {textos.notes}: {table.notes}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <div style={{ whiteSpace: "pre-wrap" }}>{cuerpo}</div>
+      )}
 
       {firma ? (
         <div className="print-sign">
@@ -50,19 +108,16 @@ export function PrintSheet({
 
       {images && images.length > 0 ? (
         <div className="print-annex">
-          <h2>{images.length === 1 ? "Anexo fotográfico" : "Anexos fotográficos"}</h2>
+          <h2>{images.length === 1 ? textos.annex : textos.annexes}</h2>
           {images.map((image, index) => (
             <figure key={image.id}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={image.dataUrl} alt={image.caption || image.name} />
-              <figcaption>
-                {image.caption ? `Foto ${index + 1}. ${image.caption}` : `Foto ${index + 1}`}
-              </figcaption>
+              <figcaption>{photoCaption(index, image.caption, lang)}</figcaption>
             </figure>
           ))}
         </div>
       ) : null}
-
     </div>
   );
 }

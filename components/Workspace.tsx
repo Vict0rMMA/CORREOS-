@@ -13,7 +13,6 @@ import { PrintSheet } from "@/components/PrintSheet";
 import { QuickActions } from "@/components/QuickActions";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useToast } from "@/components/ui/Toast";
-import { TEXT_TYPES } from "@/lib/actions";
 import {
   MAX_MAILTO_LENGTH,
   buildMailto,
@@ -26,9 +25,12 @@ import { APP_NAME, APP_TAGLINE, HISTORY_LIMIT, MAX_INPUT_CHARS } from "@/lib/con
 import { detectLanguage, effectiveSourceLang } from "@/lib/detect-language";
 import { cargarFirmaPorDefecto, hayFirmaDeSerie } from "@/lib/firma-por-defecto";
 import { downloadDocx } from "@/lib/export/docx";
+import { documentTitle } from "@/lib/export/i18n";
 import { downloadPdf } from "@/lib/export/pdf";
+import { downloadXlsx } from "@/lib/export/xlsx";
 import { endsWithSignature } from "@/lib/export/layout";
 import { resolveTargetLang } from "@/lib/prompts";
+import { tablaATexto, tablaDeParrafos } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_PREFS,
@@ -51,12 +53,16 @@ import type {
   SignatureDrawing,
   Status,
   SubjectResponse,
+  TableData,
   TextType,
   Tone,
 } from "@/types";
 
 const GENERIC_ERROR =
   "No pudimos procesar el texto. Revisa tu conexión o configuración de IA.";
+
+/** Como se llama cada descarga en el aviso de "listo". */
+const NOMBRES_EXPORT = { docx: "Word", pdf: "PDF", xlsx: "Excel" } as const;
 
 export function Workspace() {
   const { toast } = useToast();
@@ -68,6 +74,13 @@ export function Workspace() {
   const [subjectOptions, setSubjectOptions] = useState<string[]>([]);
   const [images, setImages] = useState<ReportImage[]>([]);
   const [signatureImage, setSignatureImage] = useState<SignatureDrawing | null>(null);
+  /** Planilla del ultimo resultado, cuando salio en forma de tabla. */
+  const [table, setTable] = useState<TableData | null>(null);
+  /**
+   * Idioma en el que salio el resultado. Es el que mandan los documentos:
+   * un correo en ingles se descarga con el encabezado y la fecha en ingles.
+   */
+  const [outputLang, setOutputLang] = useState<Lang>("es");
 
   // ----- preferencias -----
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -79,7 +92,7 @@ export function Workspace() {
   const [running, setRunning] = useState<Action | null>(null);
   const [primaryAction, setPrimaryAction] = useState<Action>("correct");
   const [subjectLoading, setSubjectLoading] = useState(false);
-  const [busyExport, setBusyExport] = useState<"docx" | "pdf" | null>(null);
+  const [busyExport, setBusyExport] = useState<"docx" | "pdf" | "xlsx" | null>(null);
   /** Ruta del ultimo resultado (solo cuando hubo cambio de idioma). */
   const [route, setRoute] = useState<Route | null>(null);
   /** El modelo devolvio exactamente el mismo texto (no hizo falta cambiar nada). */
@@ -160,10 +173,14 @@ export function Workspace() {
     setPrefs((current) => ({ ...current, ...patch }));
   }, []);
 
+  /** Titulo del documento, en el idioma del resultado. */
   const typeLabel = useMemo(
-    () => TEXT_TYPES.find((type) => type.id === prefs.textType)?.label ?? "Texto",
-    [prefs.textType],
+    () => documentTitle(prefs.textType, outputLang),
+    [outputLang, prefs.textType],
   );
+
+  /** La planilla devuelve una tabla en vez de texto corrido. */
+  const esPlanilla = prefs.textType === "sheet";
 
   const pushHistory = useCallback(
     (item: HistoryItem) => {
@@ -209,6 +226,7 @@ export function Workspace() {
       setStatus("loading");
       setError(null);
       setOutput("");
+      setTable(null);
       setUnchanged(false);
       setMobileView("output");
       // La ruta solo tiene sentido cuando el texto cambia de idioma.
@@ -229,6 +247,7 @@ export function Workspace() {
             textType: prefs.textType,
             subject: prefs.textType === "email" ? subject : undefined,
             signature: prefs.textType === "email" ? prefs.signature : undefined,
+            format: esPlanilla ? "table" : "text",
           }),
         });
 
@@ -237,20 +256,33 @@ export function Workspace() {
           throw new Error(data?.error ?? GENERIC_ERROR);
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+        let hoja: TableData | null = null;
 
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          received += decoder.decode(value, { stream: true });
-          setOutput(received);
+        if (esPlanilla) {
+          // La planilla llega entera y ya revisada: no hay nada que ir
+          // pintando mientras se escribe.
+          const data = (await response.json()) as { table?: TableData };
+          if (!data.table) throw new Error(GENERIC_ERROR);
+          hoja = data.table;
+          received = tablaATexto(data.table, target);
+          setTable(data.table);
+        } else {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            received += decoder.decode(value, { stream: true });
+            setOutput(received);
+          }
         }
 
         const finalText = received.trim();
         if (!finalText) throw new Error(GENERIC_ERROR);
 
         setOutput(finalText);
+        setOutputLang(target);
         setStatus("done");
         setUnchanged(finalText === source);
         setMobileView("output");
@@ -279,6 +311,7 @@ export function Workspace() {
           textType: prefs.textType,
           tone: prefs.tone,
           createdAt: Date.now(),
+          table: hoja ?? undefined,
         });
       } catch (caught) {
         if (caught instanceof DOMException && caught.name === "AbortError") return;
@@ -293,6 +326,7 @@ export function Workspace() {
       }
     },
     [
+      esPlanilla,
       lang,
       prefs.signature,
       prefs.textType,
@@ -302,6 +336,7 @@ export function Workspace() {
       subject,
       text,
       toast,
+      updatePrefs,
     ],
   );
 
@@ -406,24 +441,62 @@ export function Workspace() {
   // ----- exportar -----
   const exportPayload = useMemo(
     () => ({
-      title: prefs.textType === "email" ? "Correo" : typeLabel,
+      // La planilla lleva su propio titulo; el resto, el del tipo de texto.
+      title: table?.title || typeLabel,
       subject: prefs.textType === "email" && subject.trim() ? subject.trim() : undefined,
       body: output,
+      // El documento se escribe en el idioma del resultado, no en el de la app.
+      lang: outputLang,
       images: prefs.textType === "report" ? images : undefined,
+      table,
       signature: prefs.signature,
       signatureImage,
+      includeLogo: prefs.includeLogo,
     }),
-    [images, output, prefs.signature, prefs.textType, signatureImage, subject, typeLabel],
+    [
+      images,
+      output,
+      outputLang,
+      prefs.includeLogo,
+      prefs.signature,
+      prefs.textType,
+      signatureImage,
+      subject,
+      table,
+      typeLabel,
+    ],
   );
 
+  /**
+   * Lo que se descarga como Excel. La planilla trae su tabla; un reporte se
+   * numera aqui mismo, parrafo por parrafo, sin volver a llamar a la IA.
+   */
+  const tablaExcel = useMemo(() => {
+    if (table) return table;
+    if (prefs.textType !== "report" || !output.trim()) return null;
+    return tablaDeParrafos(output, outputLang, subject.trim() || typeLabel);
+  }, [output, outputLang, prefs.textType, subject, table, typeLabel]);
+
   const handleExport = useCallback(
-    async (kind: "docx" | "pdf") => {
+    async (kind: "docx" | "pdf" | "xlsx") => {
       if (!output) return;
+      if (kind === "xlsx" && !tablaExcel) {
+        toast("El Excel sale con las planillas y los reportes", "info");
+        return;
+      }
+
       setBusyExport(kind);
       try {
         if (kind === "docx") await downloadDocx(exportPayload);
-        else await downloadPdf(exportPayload);
-        toast(kind === "docx" ? "Word descargado" : "PDF descargado");
+        else if (kind === "pdf") await downloadPdf(exportPayload);
+        else if (tablaExcel) {
+          await downloadXlsx({
+            table: tablaExcel,
+            lang: outputLang,
+            includeLogo: prefs.includeLogo,
+          });
+        }
+        toast(`${NOMBRES_EXPORT[kind]} descargado`);
       } catch (caught) {
         console.error("[paula] exportacion fallida:", caught);
         toast("No pudimos generar el archivo", "error");
@@ -431,13 +504,14 @@ export function Workspace() {
         setBusyExport(null);
       }
     },
-    [exportPayload, output, toast],
+    [exportPayload, output, outputLang, prefs.includeLogo, tablaExcel, toast],
   );
 
   // ----- limpiar / restaurar -----
   const clearInput = useCallback(() => {
     setText("");
     setOutput("");
+    setTable(null);
     setRoute(null);
     setPreviousText(null);
     setLangOverride(null);
@@ -464,6 +538,8 @@ export function Workspace() {
   const restore = useCallback((item: HistoryItem) => {
     setText(item.input);
     setOutput(item.output);
+    setTable(item.table ?? null);
+    setOutputLang(item.lang);
     setSubject(item.subject ?? "");
     setPrefs((current) => ({ ...current, tone: item.tone, textType: item.textType }));
     setPrimaryAction(item.action);
@@ -567,6 +643,8 @@ export function Workspace() {
             signature={prefs.signature}
             onSignatureChange={(value) => updatePrefs({ signature: value })}
             signatureImage={signatureImage}
+            includeLogo={prefs.includeLogo}
+            onIncludeLogoChange={(value) => updatePrefs({ includeLogo: value })}
           />
 
           {/* En movil se ve un panel a la vez: dos cuadros altos obligaban a
@@ -633,8 +711,12 @@ export function Workspace() {
               unchanged={unchanged}
               onCopy={copyResult}
               onCopySigned={copySigned}
+              table={table}
+              canExportXlsx={tablaExcel !== null}
+              lang={outputLang}
               onDownloadDocx={() => void handleExport("docx")}
               onDownloadPdf={() => void handleExport("pdf")}
+              onDownloadXlsx={() => void handleExport("xlsx")}
               onPrint={() => window.print()}
               onOpenMail={() => void openMail()}
               busyExport={busyExport}
@@ -697,9 +779,12 @@ export function Workspace() {
         title={exportPayload.title}
         subject={exportPayload.subject}
         body={output}
+        lang={outputLang}
         images={exportPayload.images}
+        table={table}
         signature={prefs.signature}
         signatureImage={signatureImage}
+        includeLogo={prefs.includeLogo}
       />
     </>
   );

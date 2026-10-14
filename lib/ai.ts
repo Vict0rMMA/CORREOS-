@@ -240,6 +240,91 @@ export async function completion({
   return text;
 }
 
+export interface JsonOptions<T> {
+  system: string;
+  user: string;
+  /** Esquema de la respuesta, en el estilo OpenAPI que admite el proveedor. */
+  schema: Record<string, unknown>;
+  maxTokens?: number;
+  /** Revisa el resultado; devuelve la lista de problemas (vacia = correcto). */
+  verify?: (value: T) => string[];
+  /** Prompt del segundo intento, con los problemas encontrados. */
+  retryUser?: (crudo: string, problemas: string[]) => string;
+}
+
+export interface JsonResult<T> {
+  value: T;
+  /** Lo que seguia sin cuadrar despues del reintento. Vacio = todo correcto. */
+  problems: string[];
+}
+
+/**
+ * Respuesta en JSON con esquema fijo, para la planilla.
+ *
+ * No va en streaming a proposito: una tabla hay que revisarla entera antes de
+ * darla por buena, y media tabla en pantalla no sirve de nada. Si la revision
+ * falla se reintenta UNA vez diciendo exactamente que fallo; si vuelve a
+ * fallar se devuelve con los problemas, para avisar en vez de entregar una
+ * planilla con los datos cambiados.
+ */
+export async function jsonCompletion<T>({
+  system,
+  user,
+  schema,
+  maxTokens = 8000,
+  verify,
+  retryUser,
+}: JsonOptions<T>): Promise<JsonResult<T>> {
+  const pedir = async (prompt: string): Promise<{ value: T; raw: string }> => {
+    const response = await withRetry((model) =>
+      getClient().models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          systemInstruction: system,
+          // Una tabla es copiar datos, no redactar: cero creatividad.
+          temperature: 0,
+          maxOutputTokens: maxTokens,
+          responseMimeType: "application/json",
+          responseSchema: schema,
+        },
+      }),
+    );
+
+    if (response.promptFeedback?.blockReason) {
+      throw new AIRequestError(
+        `Request blocked by the provider: ${response.promptFeedback.blockReason}`,
+      );
+    }
+
+    const raw = response.text?.trim();
+    if (!raw) throw new AIRequestError("Empty response from the provider");
+
+    try {
+      return { value: JSON.parse(raw) as T, raw };
+    } catch {
+      throw new AIRequestError("The provider did not return valid JSON");
+    }
+  };
+
+  const primero = await pedir(user);
+  if (!verify) return { value: primero.value, problems: [] };
+
+  const problemas = verify(primero.value);
+  if (problemas.length === 0 || !retryUser) {
+    return { value: primero.value, problems: problemas };
+  }
+
+  console.warn(`[paula] tabla rechazada: ${problemas.join(" | ")}`);
+  try {
+    const segundo = await pedir(retryUser(primero.raw, problemas));
+    return { value: segundo.value, problems: verify(segundo.value) };
+  } catch (error) {
+    console.error("[paula] el reintento de la tabla tampoco salio:", error);
+    return { value: primero.value, problems: problemas };
+  }
+}
+
 export interface TranscriptionOptions {
   /** Audio en base64 (WAV mono 16 kHz). */
   base64: string;

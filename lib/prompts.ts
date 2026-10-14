@@ -36,8 +36,22 @@ STYLE
 
 WHEN THE OUTPUT LANGUAGE IS ENGLISH
 - Write the whole answer in English. Never leave sentences, words or connectors in Spanish.
+- Write AMERICAN English: color, center, aluminum, traveled, canceled, program, analyze, meter, liter, schedule (never colour, centre, aluminium, travelled, programme, analyse, metre, litre).
 - Use standard English spelling, capitalization and punctuation.
 - Check the things Spanish speakers get wrong in English: articles (a/an/the), prepositions, subject-verb agreement, verb tenses, word order, false friends (actually, assist, realize, carpet, library) and capitalization of days, months, languages and nationalities.
+
+AIRCRAFT MAINTENANCE TERMINOLOGY (Spanish -> American English)
+- aeronave / avion = aircraft; matricula = tail number; puerta = gate; turno = shift
+- falla diferida = deferred defect; novedad = discrepancy; tarjeta de trabajo = job card
+- inspeccion = inspection; mantenimiento de linea = line maintenance; tecnico = technician
+- pieza = part; repuesto = spare part; herramienta = tool; bitacora = logbook
+- llegada = arrival; salida = departure; estacion = station; tripulacion = crew
+- Use the standard US industry term, not a literal translation.
+
+CODES AND DATA ARE COPIED, NEVER TRANSLATED
+- Copy exactly, character by character: tail numbers (N123AV, HK-4721), gate numbers (B4), station codes (MIA, DFW), times (07:30), dates, quantities, part numbers, work order numbers, unit numbers, MEL, NEF, JC and the priorities P-0, P-1, P-2, P-3.
+- Acronyms stay as they are: never expand them, translate them or change their capitalization.
+- People's names keep their original spelling and their accents.
 
 WHEN THE OUTPUT LANGUAGE IS SPANISH
 - Write the whole answer in Spanish, with correct accents (tildes), n-tilde and opening signs for questions and exclamations.
@@ -66,6 +80,8 @@ const TEXT_TYPE_INSTRUCTIONS: Record<TextType, string> = {
   report:
     "a report: factual and well organized, with a clear opening, the findings or events in order, and a short conclusion; no email greetings or closings",
   message: "a short message (chat or instant messaging), without email formalities",
+  sheet:
+    "a shift assignment sheet: data in columns, short entries, no prose and no courtesy formulas",
 };
 
 const LANG_NAMES: Record<Lang, string> = {
@@ -180,3 +196,103 @@ export function buildRetryPrompt(req: ProcessRequest, rejected: string): string 
     req.text.trim(),
   ].join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// Planillas (salida en tabla)
+// ---------------------------------------------------------------------------
+
+/** Reglas comunes a todo lo que acaba dentro de una celda. */
+const TABLE_RULES = [
+  "Never invent rows, columns, data or notes. Only what the source says.",
+  "An empty cell is an empty string.",
+  "Copy codes, tail numbers, gate numbers, times, dates and numbers character by character; never translate or reformat them.",
+  "Keep cells short: this is a table, not prose. No trailing periods on short entries.",
+];
+
+/** Mensaje de usuario para convertir un texto libre en una tabla. */
+export function buildTablePrompt(req: ProcessRequest): string {
+  const target = resolveTargetLang(req.action, req.lang);
+  const labels = target === "en" ? ["#", "Description"] : ["#", "Descripción"];
+
+  return [
+    `TASK: turn the text below into a table, written in ${LANG_NAMES[target]}.`,
+    `OUTPUT LANGUAGE: ${LANG_NAMES[target]}. Every column name, every cell and every note must be in ${LANG_NAMES[target]}.`,
+    `TONE: ${TONE_INSTRUCTIONS[req.tone]}`,
+    "RULES:",
+    ...TABLE_RULES.map((rule) => `- ${rule}`),
+    "- Every row must have exactly as many cells as there are columns.",
+    `- If the text is not tabular, use the columns ${JSON.stringify(labels)} and put one paragraph per row.`,
+    "- title: a short heading for the sheet. meta.date, meta.shift and meta.supervisor: only if the text states them.",
+    "- notes: anything that does not fit in the table. Leave it out if there is nothing.",
+    "---- TEXT ----",
+    req.text.trim(),
+  ].join("\n");
+}
+
+/**
+ * Mensaje de usuario para traducir solo las celdas con texto.
+ *
+ * Cuando el usuario pega una tabla, las columnas y las celdas con codigos,
+ * horas o numeros se resuelven sin IA. Al modelo solo le llega la lista de
+ * celdas con texto de verdad, y tiene que devolver la misma cantidad.
+ */
+export function buildCellsPrompt(cells: string[], target: Lang): string {
+  return [
+    `TASK: translate each entry of the list below into ${LANG_NAMES[target]}.`,
+    "They are cells of an aircraft maintenance sheet.",
+    "RULES:",
+    ...TABLE_RULES.map((rule) => `- ${rule}`),
+    `- Return exactly ${cells.length} entries, in the same order. Entry i is the translation of entry i.`,
+    "- Translate the meaning, do not transliterate. Use the standard US industry term.",
+    "- If an entry is already correct in the target language, repeat it unchanged.",
+    "- Never merge, split, reorder or drop entries.",
+    "---- ENTRIES ----",
+    JSON.stringify(cells, null, 0),
+  ].join("\n");
+}
+
+/** Lo que se le dice al modelo cuando su tabla no paso la revision. */
+export function buildTableRetryPrompt(previous: string, problems: string[]): string {
+  return [
+    "Your previous answer was REJECTED. These are the exact problems:",
+    ...problems.map((problem) => `- ${problem}`),
+    "Fix every one of them. Keep everything that was already right.",
+    "Do not add or remove rows. Codes, times and numbers must appear exactly as in the source.",
+    "---- PREVIOUS ANSWER ----",
+    previous.slice(0, 4000),
+  ].join("\n");
+}
+
+/**
+ * Esquema de la tabla que devuelve el modelo.
+ * Con el esquema puesto, el proveedor ya no puede contestar con texto suelto
+ * ni envolver el JSON en comillas.
+ */
+export const TABLE_SCHEMA: Record<string, unknown> = {
+  type: "OBJECT",
+  properties: {
+    title: { type: "STRING" },
+    meta: {
+      type: "OBJECT",
+      properties: {
+        date: { type: "STRING" },
+        shift: { type: "STRING" },
+        supervisor: { type: "STRING" },
+      },
+    },
+    columns: { type: "ARRAY", items: { type: "STRING" } },
+    rows: { type: "ARRAY", items: { type: "ARRAY", items: { type: "STRING" } } },
+    notes: { type: "STRING" },
+  },
+  required: ["title", "columns", "rows"],
+  propertyOrdering: ["title", "meta", "columns", "rows", "notes"],
+};
+
+/** Esquema de la lista de celdas traducidas. */
+export const CELLS_SCHEMA: Record<string, unknown> = {
+  type: "OBJECT",
+  properties: {
+    cells: { type: "ARRAY", items: { type: "STRING" } },
+  },
+  required: ["cells"],
+};
