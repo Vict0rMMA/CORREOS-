@@ -16,10 +16,34 @@ const DIR = path.join(SALIDA, "planilla");
 fs.rmSync(DIR, { recursive: true, force: true });
 fs.mkdirSync(DIR, { recursive: true });
 
+/** Las quince columnas de la plantilla Terminal, ya en inglés. */
+const COLUMNAS = [
+  "EMPLOYEE", "LUNCH",
+  "A/C", "GATE", "ASSGN @",
+  "A/C 2", "GATE 2", "ASSGN @ 2",
+  "A/C 3", "GATE 3", "ASSGN @ 3",
+  "A/C 4", "GATE 4", "ASSGN @ 4",
+  "NOTES",
+];
+/** Las notas son la última columna. */
+const NOTAS = COLUMNAS.length - 1;
+
+/** Una fila del turno: solo la primera asignación y la nota. */
+function fila(nombre, almuerzo, avion, puerta, hora, nota) {
+  const celdas = new Array(COLUMNAS.length).fill("");
+  celdas[0] = nombre;
+  celdas[1] = almuerzo;
+  celdas[2] = avion;
+  celdas[3] = puerta;
+  celdas[4] = hora;
+  celdas[NOTAS] = nota;
+  return celdas.join("\t");
+}
+
 /** La tabla del encargo, tal y como se copia desde Excel. */
 const TABLA = [
-  "J. Pérez\t12:00\tN123AV\tB4\t07:30\t\t\tFalla diferida MEL-21 pendiente",
-  "M. Gómez\t12:30\tN789AV\tA1\t08:00\t\t\tRevisión completada sin novedades",
+  fila("J. Pérez", "12:00", "N123AV", "B4", "07:30", "Falla diferida MEL-21 pendiente"),
+  fila("M. Gómez", "12:30", "N789AV", "A1", "08:00", "Revisión completada sin novedades"),
 ].join("\n");
 
 const navegador = await abrirNavegador();
@@ -61,7 +85,7 @@ await page.waitForTimeout(400);
 informe.comprobar(
   "la tabla pegada se puede editar antes de traducir",
   (await celda(0, 0).innerText()) === "J. Pérez" &&
-    (await celda(1, 7).innerText()) === "Revisión completada sin novedades",
+    (await celda(1, NOTAS).innerText()) === "Revisión completada sin novedades",
 );
 
 // Se corrige una celda a mano, como haría cualquiera antes de traducir.
@@ -88,7 +112,7 @@ const columnas = await encabezados();
 console.log(`  encabezados: ${columnas.join(" · ")}`);
 informe.comprobar(
   "los encabezados salen en el inglés de la plantilla",
-  columnas.join("|") === "EMPLOYEE|LUNCH|A/C|GATE|ASSGN @|A/C 2|GATE 2|NOTES",
+  columnas.join("|") === COLUMNAS.join("|"),
   columnas.join(" · "),
 );
 
@@ -106,7 +130,7 @@ informe.comprobar(
   "las celdas vacías siguen vacías",
   (await celda(0, 5).innerText()).trim() === "" && (await celda(0, 6).innerText()).trim() === "",
 );
-informe.comprobar("MEL-21 se conserva", (await celda(0, 7).innerText()).includes("MEL-21"));
+informe.comprobar("MEL-21 se conserva", (await celda(0, NOTAS).innerText()).includes("MEL-21"));
 informe.comprobar(
   "las notas están traducidas",
   !/pendiente|Revisi.n|novedades|completada/i.test(resultado),
@@ -118,15 +142,15 @@ informe.comprobar(
 );
 
 // --- 3. Corregir el resultado a mano ---
-await celda(1, 7).dblclick();
+await celda(1, NOTAS).dblclick();
 await page.keyboard.press("Control+A");
 await page.keyboard.type("Inspection completed with no findings");
 await page.keyboard.press("Enter");
 await page.waitForTimeout(300);
 informe.comprobar(
   "el resultado en inglés también se puede corregir",
-  (await celda(1, 7).innerText()) === "Inspection completed with no findings",
-  await celda(1, 7).innerText(),
+  (await celda(1, NOTAS).innerText()) === "Inspection completed with no findings",
+  await celda(1, NOTAS).innerText(),
 );
 
 // --- 4. Descargar el Excel ---
@@ -164,12 +188,12 @@ hoja.eachRow((fila, numero) => {
 informe.comprobar("hay fila de encabezado", filaEncabezado > 0, `fila ${filaEncabezado}`);
 
 if (filaEncabezado > 0) {
-  const leidos = [1, 2, 3, 4, 5, 6, 7, 8].map((columna) =>
-    String(hoja.getRow(filaEncabezado).getCell(columna).value ?? ""),
+  const leidos = COLUMNAS.map((_, indice) =>
+    String(hoja.getRow(filaEncabezado).getCell(indice + 1).value ?? ""),
   );
   informe.comprobar(
     "los encabezados del Excel coinciden",
-    leidos.join("|") === "EMPLOYEE|LUNCH|A/C|GATE|ASSGN @|A/C 2|GATE 2|NOTES",
+    leidos.join("|") === COLUMNAS.join("|"),
     leidos.join(" · "),
   );
 
@@ -193,13 +217,13 @@ if (filaEncabezado > 0) {
 
   informe.comprobar(
     "el Excel trae la corrección hecha a mano",
-    String(segunda.getCell(8).value ?? "") === "Inspection completed with no findings",
-    String(segunda.getCell(8).value ?? ""),
+    String(segunda.getCell(NOTAS + 1).value ?? "") === "Inspection completed with no findings",
+    String(segunda.getCell(NOTAS + 1).value ?? ""),
   );
   informe.comprobar(
     "MEL-21 sigue en el Excel",
-    String(primera.getCell(8).value ?? "").includes("MEL-21"),
-    String(primera.getCell(8).value ?? ""),
+    String(primera.getCell(NOTAS + 1).value ?? "").includes("MEL-21"),
+    String(primera.getCell(NOTAS + 1).value ?? ""),
   );
   informe.comprobar(
     "no hay una tercera fila inventada",
@@ -225,7 +249,7 @@ informe.comprobar("el panel queda fijo", hoja.views?.[0]?.ySplit === filaEncabez
 // --- 5. Si se cambia la entrada, el resultado queda marcado ---
 await page.getByRole("tab", { name: "Entrada en español" }).click();
 await page.waitForTimeout(300);
-await celda(0, 7).dblclick();
+await celda(0, NOTAS).dblclick();
 await page.keyboard.press("Control+A");
 await page.keyboard.type("Falla diferida MEL-21 y cambio de pieza");
 await page.keyboard.press("Enter");

@@ -6,30 +6,44 @@ import { downloadBlob, slugify } from "@/lib/utils";
 import type { Lang, SheetDoc, SheetSection } from "@/types";
 
 /**
- * Planilla en Excel de verdad (.xlsx con exceljs): logo, encabezados con el
- * azul de la casa, filas alternas, horas como hora y la hoja lista para
- * imprimir en horizontal.
+ * Planilla en Excel de verdad (.xlsx con exceljs).
+ *
+ * La idea es que no parezca una hoja de calculo en bruto sino un documento:
+ * sin la cuadricula gris de fondo, con una banda de encabezado, la tabla
+ * enmarcada, las filas altas lo justo para que el texto quepa entero y cada
+ * columna alineada segun lo que lleva dentro.
  *
  * exceljs se carga de forma dinamica, igual que docx y jspdf: pesa bastante y
  * solo hace falta cuando se pulsa "Descargar Excel".
  */
 
-/** Azul marino de los encabezados. */
+/** Azul marino de la casa. */
 const AZUL = "FF1F3864";
-const GRIS_BORDE = "FFBFBFBF";
-const GRIS_FILA = "FFF2F2F2";
+const AZUL_CLARO = "FF2E4D7D";
+const GRIS_TEXTO = "FF44546A";
+const GRIS_BORDE = "FFD6DCE4";
+const GRIS_FILA = "FFF4F6FA";
+const TINTA = "FF1A1A1A";
 const FUENTE = "Arial";
 
 /** Alto del logo en pixeles dentro de la hoja. */
-const LOGO_ALTO = 48;
+const LOGO_ALTO = 46;
+
+/** Alto de una linea de texto dentro de una celda, en puntos. */
+const LINEA = 13.5;
+const ALTO_MINIMO = 22;
 
 const HORA = /^(\d{1,2}):([0-5]\d)$/;
+const NUMERO_LIMPIO = /^\d{1,9}$/;
+
+/** Columnas cuyos valores son codigos y nunca pueden volverse numero. */
+const COLUMNAS_CODIGO = /^(a\/c|gate|sta|crew|mel\/nef|tail|avion|puerta|estacion)/i;
 
 export interface SheetPayload {
   doc: SheetDoc;
   /** Idioma del documento: el mismo que el del resultado. */
   lang: Lang;
-  /** Pone el logo de American Airlines en la primera fila. */
+  /** Pone el logo de American Airlines en la cabecera. */
   includeLogo?: boolean;
 }
 
@@ -43,13 +57,49 @@ function comoHora(valor: string): number | null {
   return (horas * 60 + minutos) / 1440;
 }
 
-/** Ancho de columna a partir de lo que tiene que caber. */
+/**
+ * true si la celda se puede guardar como numero.
+ *
+ * Un contador o un numero de empleado como numero evita el aviso de Excel
+ * ("numero guardado como texto"). Un codigo con cero delante, o cualquier cosa
+ * en una columna de matriculas o puertas, se queda en texto.
+ */
+function comoNumero(valor: string, columna: string): number | null {
+  const texto = valor.trim();
+  if (!NUMERO_LIMPIO.test(texto)) return null;
+  if (texto.length > 1 && texto.startsWith("0")) return null;
+  if (COLUMNAS_CODIGO.test(columna.trim())) return null;
+  return Number(texto);
+}
+
+/**
+ * Ancho de columna a partir de lo que tiene que caber.
+ *
+ * El encabezado pide cinco caracteres de mas: el boton del filtro se dibuja
+ * dentro de la celda y, si no, se come el final del titulo.
+ */
 function anchoColumna(encabezado: string, celdas: string[]): number {
-  const largo = celdas.reduce(
-    (mayor, celda) => Math.max(mayor, celda.length),
-    encabezado.length,
-  );
-  return Math.min(40, Math.max(10, largo + 2));
+  const largoDatos = celdas.reduce((mayor, celda) => Math.max(mayor, celda.length), 0);
+  return Math.min(42, Math.max(10, encabezado.length + 5, largoDatos + 3));
+}
+
+/** Cuantas lineas ocupa un texto en una columna de ese ancho. */
+function lineasQueOcupa(texto: string, ancho: number): number {
+  if (!texto) return 1;
+  const porLinea = Math.max(6, Math.floor(ancho) - 1);
+  let lineas = 0;
+  for (const parrafo of texto.split("\n")) {
+    lineas += Math.max(1, Math.ceil(parrafo.length / porLinea));
+  }
+  return lineas;
+}
+
+/** Alineacion segun lo que lleva la celda: los datos cortos van centrados. */
+function alineacion(valor: string): "left" | "center" {
+  const texto = valor.trim();
+  if (!texto) return "center";
+  if (texto.length <= 10 && !/\s/.test(texto)) return "center";
+  return "left";
 }
 
 export async function downloadXlsx({
@@ -67,6 +117,7 @@ export async function downloadXlsx({
   const workbook = new ExcelJS.Workbook();
   workbook.created = new Date();
   const hoja = workbook.addWorksheet(nombreDeHoja(planilla.title, textos.titles.sheet), {
+    properties: { tabColor: { argb: AZUL } },
     pageSetup: {
       orientation: "landscape",
       fitToPage: true,
@@ -79,44 +130,82 @@ export async function downloadXlsx({
 
   /** El ancho de la hoja es el del bloque mas ancho. */
   const ancho = Math.max(...bloques.map((bloque) => bloque.columns.length));
+
+  // Los anchos se calculan antes de escribir: hacen falta para saber cuantas
+  // lineas ocupa cada celda y darle a la fila el alto que necesita.
+  const anchos: number[] = [];
+  for (let columna = 1; columna <= ancho; columna += 1) {
+    const valores: string[] = [];
+    let encabezado = "";
+    for (const bloque of bloques) {
+      if (columna > bloque.columns.length) continue;
+      if (!encabezado) encabezado = bloque.columns[columna - 1] ?? "";
+      for (const fila of bloque.rows) valores.push(fila[columna - 1] ?? "");
+    }
+    const medida = anchoColumna(encabezado, valores);
+    anchos.push(medida);
+    hoja.getColumn(columna).width = medida;
+  }
+
   let fila = 0;
 
-  // --- Fila 1: logo a la izquierda y titulo a la derecha ---
+  // ---------------------------------------------------------------------
+  // Cabecera: logo a la izquierda, titulo a la derecha, sobre fondo blanco
+  // ---------------------------------------------------------------------
   fila += 1;
-  hoja.getRow(fila).height = 40;
+  const filaTitulo = fila;
+  hoja.getRow(filaTitulo).height = 44;
 
-  const celdaTitulo = hoja.getCell(fila, Math.min(2, ancho));
-  if (ancho > 1) hoja.mergeCells(fila, Math.min(2, ancho), fila, ancho);
+  if (ancho > 1) hoja.mergeCells(filaTitulo, Math.min(3, ancho), filaTitulo, ancho);
+  const celdaTitulo = hoja.getCell(filaTitulo, Math.min(3, ancho));
   celdaTitulo.value = planilla.title;
   celdaTitulo.font = { name: FUENTE, size: 16, bold: true, color: { argb: AZUL } };
   celdaTitulo.alignment = { horizontal: "right", vertical: "middle" };
+
+  // Una regla fina bajo la cabecera separa el membrete de la tabla.
+  for (let columna = 1; columna <= ancho; columna += 1) {
+    hoja.getCell(filaTitulo, columna).border = {
+      bottom: { style: "medium", color: { argb: AZUL } },
+    };
+  }
 
   if (includeLogo) {
     const logo = await cargarLogo();
     if (logo) {
       const id = workbook.addImage({ base64: logo.base64, extension: "png" });
       hoja.addImage(id, {
-        tl: { col: 0.15, row: fila - 1 + 0.1 },
+        tl: { col: 0.2, row: filaTitulo - 1 + 0.12 },
         ext: medidaLogo(logo, LOGO_ALTO),
         editAs: "oneCell",
       });
     }
   }
 
-  // --- Fila 2: fecha, turno y supervisor (solo los que vienen) ---
-  const datos = [
-    planilla.meta.date && `${textos.date}: ${planilla.meta.date}`,
-    planilla.meta.shift && `${textos.shift}: ${planilla.meta.shift}`,
-    planilla.meta.supervisor && `${textos.supervisor}: ${planilla.meta.supervisor}`,
-  ].filter(Boolean) as string[];
+  // ---------------------------------------------------------------------
+  // Fecha, turno y supervisor, con la etiqueta en negrita
+  // ---------------------------------------------------------------------
+  const datos: Array<[string, string]> = [];
+  if (planilla.meta.date) datos.push([textos.date, planilla.meta.date]);
+  if (planilla.meta.shift) datos.push([textos.shift, planilla.meta.shift]);
+  if (planilla.meta.supervisor) datos.push([textos.supervisor, planilla.meta.supervisor]);
 
   if (datos.length > 0) {
     fila += 1;
-    hoja.getRow(fila).height = 18;
+    hoja.getRow(fila).height = 22;
     if (ancho > 1) hoja.mergeCells(fila, 1, fila, ancho);
     const celda = hoja.getCell(fila, 1);
-    celda.value = datos.join("     ");
-    celda.font = { name: FUENTE, size: 10, bold: true, color: { argb: "FF44546A" } };
+    celda.value = {
+      richText: datos.flatMap(([etiqueta, valor], indice) => [
+        ...(indice > 0
+          ? [{ font: { name: FUENTE, size: 10 }, text: "        " }]
+          : []),
+        {
+          font: { name: FUENTE, size: 10, bold: true, color: { argb: AZUL } },
+          text: `${etiqueta}: `,
+        },
+        { font: { name: FUENTE, size: 10, color: { argb: GRIS_TEXTO } }, text: valor },
+      ]),
+    };
     celda.alignment = { horizontal: "left", vertical: "middle" };
   }
 
@@ -134,7 +223,7 @@ export async function downloadXlsx({
   bloques.forEach((bloque, indiceBloque) => {
     // Aire antes de cada bloque.
     fila += 1;
-    hoja.getRow(fila).height = indiceBloque === 0 ? 6 : 14;
+    hoja.getRow(fila).height = indiceBloque === 0 ? 10 : 18;
 
     if (bloque.title) {
       fila += 1;
@@ -150,7 +239,17 @@ export async function downloadXlsx({
     fila += 1;
     const filaEncabezado = fila;
     const encabezado = hoja.getRow(filaEncabezado);
-    encabezado.height = 26;
+    encabezado.height = Math.max(
+      28,
+      Math.max(
+        ...bloque.columns.map((nombre, indice) =>
+          // Se descuenta el hueco del boton del filtro.
+          lineasQueOcupa(nombre, (anchos[indice] ?? 12) - 4),
+        ),
+      ) *
+        LINEA +
+        12,
+    );
     bloque.columns.forEach((nombre, indice) => {
       const celda = encabezado.getCell(indice + 1);
       celda.value = nombre;
@@ -159,9 +258,9 @@ export async function downloadXlsx({
       celda.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
       celda.border = {
         top: { style: "thin", color: { argb: AZUL } },
-        left: { style: "thin", color: { argb: AZUL } },
-        bottom: { style: "thin", color: { argb: AZUL } },
-        right: { style: "thin", color: { argb: AZUL } },
+        left: { style: "thin", color: { argb: AZUL_CLARO } },
+        bottom: { style: "medium", color: { argb: AZUL } },
+        right: { style: "thin", color: { argb: AZUL_CLARO } },
       };
     });
 
@@ -169,31 +268,49 @@ export async function downloadXlsx({
     bloque.rows.forEach((datosFila, indiceFila) => {
       fila += 1;
       const linea = hoja.getRow(fila);
-      linea.height = 22;
+      const ultima = indiceFila === bloque.rows.length - 1;
 
-      bloque.columns.forEach((_, indiceColumna) => {
+      // El alto se calcula: con un alto fijo, una nota larga se veia cortada.
+      linea.height = Math.max(
+        ALTO_MINIMO,
+        Math.max(
+          ...bloque.columns.map((_, indice) =>
+            lineasQueOcupa(datosFila[indice] ?? "", anchos[indice] ?? 12),
+          ),
+        ) *
+          LINEA +
+          7,
+      );
+
+      bloque.columns.forEach((nombreColumna, indiceColumna) => {
         const valor = datosFila[indiceColumna] ?? "";
         const celda = linea.getCell(indiceColumna + 1);
         const hora = comoHora(valor);
-        const esContador = bloque.columns[indiceColumna]?.trim() === "#";
+        const numero = hora === null ? comoNumero(valor, nombreColumna) : null;
 
         if (hora !== null) {
           // Hora de verdad: asi se puede ordenar y restar en Excel.
           celda.value = hora;
           celda.numFmt = "hh:mm";
           celda.alignment = { horizontal: "center", vertical: "middle" };
-        } else if (esContador && /^\d{1,4}$/.test(valor.trim())) {
-          celda.value = Number(valor.trim());
+        } else if (numero !== null) {
+          celda.value = numero;
           celda.alignment = { horizontal: "center", vertical: "middle" };
         } else {
           // Todo lo demas se queda como texto: una matricula o una puerta no
           // pueden convertirse en numero ni en fecha.
           celda.value = valor;
-          celda.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+          celda.alignment = {
+            horizontal: alineacion(valor),
+            vertical: "middle",
+            wrapText: true,
+          };
         }
 
-        celda.font = { name: FUENTE, size: 10 };
-        celda.border = borde;
+        celda.font = { name: FUENTE, size: 10, color: { argb: TINTA } };
+        celda.border = ultima
+          ? { ...borde, bottom: { style: "medium", color: { argb: AZUL } } }
+          : borde;
         if (indiceFila % 2 === 1) {
           celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GRIS_FILA } };
         }
@@ -212,24 +329,20 @@ export async function downloadXlsx({
     if (ancho > 1) hoja.mergeCells(fila, 1, fila, ancho);
     const celda = hoja.getCell(fila, 1);
     celda.value = `${textos.notes}: ${planilla.notes}`;
-    celda.font = { name: FUENTE, size: 9, italic: true, color: { argb: "FF595959" } };
+    celda.font = { name: FUENTE, size: 9, italic: true, color: { argb: GRIS_TEXTO } };
     celda.alignment = { horizontal: "left", vertical: "top", wrapText: true };
-    hoja.getRow(fila).height = 28;
+    hoja.getRow(fila).height = Math.max(
+      20,
+      lineasQueOcupa(planilla.notes, anchos.reduce((total, a) => total + a, 0)) * LINEA + 8,
+    );
   }
 
-  // --- Anchos, filtro y panel fijo ---
-  for (let columna = 1; columna <= ancho; columna += 1) {
-    const textosColumna: string[] = [];
-    let encabezado = "";
-    for (const bloque of bloques) {
-      if (columna > bloque.columns.length) continue;
-      if (!encabezado) encabezado = bloque.columns[columna - 1] ?? "";
-      for (const datosFila of bloque.rows) textosColumna.push(datosFila[columna - 1] ?? "");
-    }
-    hoja.getColumn(columna).width = anchoColumna(encabezado, textosColumna);
-  }
+  const ultimaFila = fila;
 
-  hoja.views = [{ state: "frozen", ySplit: filaEncabezadoPrincipal }];
+  // --- Filtro, panel fijo y cuadricula de fondo apagada ---
+  hoja.views = [
+    { state: "frozen", ySplit: filaEncabezadoPrincipal, showGridLines: false },
+  ];
   if (ultimaFilaPrincipal > filaEncabezadoPrincipal) {
     hoja.autoFilter = {
       from: { row: filaEncabezadoPrincipal, column: 1 },
@@ -239,12 +352,13 @@ export async function downloadXlsx({
 
   // --- Impresion ---
   hoja.pageSetup.printTitlesRow = `${filaEncabezadoPrincipal}:${filaEncabezadoPrincipal}`;
+  hoja.pageSetup.printArea = `A1:${hoja.getColumn(ancho).letter}${ultimaFila}`;
   hoja.headerFooter = {
     oddFooter: `&L&9${isoDate()}&R&9${textos.page} &P ${textos.of} &N`,
   };
 
   const buffer = await workbook.xlsx.writeBuffer();
-  await comprobar(ExcelJS, buffer, bloques, filaEncabezadoPrincipal, Boolean(includeLogo));
+  await comprobar(ExcelJS, buffer, bloques, filaEncabezadoPrincipal);
 
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -262,7 +376,6 @@ async function comprobar(
   buffer: ArrayBuffer | Buffer,
   bloques: SheetSection[],
   filaEncabezado: number,
-  conLogo: boolean,
 ): Promise<void> {
   const copia = new ExcelJS.Workbook();
   await copia.xlsx.load(buffer as ArrayBuffer);
@@ -291,16 +404,12 @@ async function comprobar(
       if (leido === null || leido === undefined || leido === "") {
         throw new Error(`la fila ${indice + 1} perdió el dato "${esperado}"`);
       }
-      // Las horas viajan como numero: ahi basta con que haya algo.
+      // Las horas y los numeros viajan como numero: ahi basta con que haya algo.
       if (comoHora(esperado) !== null) continue;
+      if (comoNumero(esperado, principal.columns[columna]) !== null) continue;
       if (typeof leido === "string" && leido.trim() !== esperado) {
         throw new Error(`"${esperado}" salió como "${leido.trim()}" en el Excel`);
       }
     }
-  }
-
-  if (conLogo && (copia.model.media ?? []).length === 0) {
-    // No es un fallo: el logo puede no estar disponible y el archivo vale igual.
-    console.warn("[paula] el Excel salió sin el logo");
   }
 }

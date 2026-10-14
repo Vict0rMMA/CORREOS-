@@ -43,14 +43,16 @@ export function sinFilasVacias(seccion: SheetSection): SheetSection {
   return { ...seccion, rows };
 }
 
-/** La planilla lista para exportar: sin las filas en blanco del final. */
+/**
+ * La planilla lista para exportar: sin las filas en blanco del final.
+ *
+ * Los bloques se quedan aunque no tengan ni una fila escrita. Llegaron a
+ * descartarse, y entonces una planilla de noches con la tabla principal todavia
+ * vacia se traducia sin ella: desaparecia la tabla de arriba y solo bajaban el
+ * personal y los vehiculos.
+ */
 export function paraExportar(doc: SheetDoc): SheetDoc {
-  return {
-    ...doc,
-    sections: doc.sections
-      .map(sinFilasVacias)
-      .filter((seccion) => seccion.rows.length > 0),
-  };
+  return { ...doc, sections: doc.sections.map(sinFilasVacias) };
 }
 
 // ---------------------------------------------------------------------------
@@ -193,11 +195,136 @@ export function rangoATexto(
   return lineas.join("\n");
 }
 
-/** Convierte lo pegado en una rejilla de celdas. */
+/**
+ * Convierte lo pegado en una rejilla de celdas.
+ *
+ * Lo copiado de Excel viene con tabuladores. Pero lo copiado de un PDF, de un
+ * correo o de una pantalla trae las columnas separadas por varios espacios:
+ * sin esto, la fila entera caia dentro de una sola celda.
+ */
 export function texto2D(texto: string): string[][] {
   const limpio = texto.replace(/\r\n/g, "\n").replace(/\n+$/, "");
   if (!limpio) return [];
-  return limpio.split("\n").map((linea) => linea.split("\t"));
+
+  const lineas = limpio.split("\n");
+  if (lineas.some((linea) => linea.includes("\t"))) {
+    return lineas.map((linea) => linea.split("\t"));
+  }
+
+  // Sin un solo tabulador: se separa por dos o mas espacios, y solo si eso
+  // produce de verdad varias columnas en mas de una linea.
+  const porEspacios = lineas.map((linea) => linea.trim().split(/ {2,}/));
+  const conVarias = porEspacios.filter((linea) => linea.length > 1).length;
+  if (conVarias >= Math.min(2, lineas.length)) return porEspacios;
+
+  return lineas.map((linea) => [linea]);
+}
+
+/**
+ * Reparte una linea segun donde empieza cada columna en la cabecera.
+ *
+ * Es lo que salva las celdas vacias: al separar por espacios, "B4" seguido de
+ * dos columnas en blanco y una nota se convertia en "B4" y la nota pegada
+ * detras, y la nota acababa en la columna equivocada. Mirando en que posicion
+ * arranca cada trozo se sabe a que columna va.
+ */
+function repartirPorPosicion(linea: string, inicios: number[]): string[] {
+  const celdas: string[][] = inicios.map(() => []);
+
+  for (const trozo of linea.matchAll(/\S+(?: (?!\s)\S+)*/g)) {
+    const posicion = trozo.index ?? 0;
+    let destino = 0;
+    let distancia = Number.POSITIVE_INFINITY;
+    inicios.forEach((inicio, indice) => {
+      const separacion = Math.abs(posicion - inicio);
+      if (separacion < distancia) {
+        distancia = separacion;
+        destino = indice;
+      }
+    });
+    celdas[destino].push(trozo[0]);
+  }
+
+  return celdas.map((partes) => partes.join(" "));
+}
+
+/** En que posicion empieza cada columna de una linea de encabezados. */
+function iniciosDeColumna(cabecera: string): number[] {
+  const inicios: number[] = [];
+  for (const trozo of cabecera.matchAll(/\S+(?: (?!\s)\S+)*/g)) {
+    inicios.push(trozo.index ?? 0);
+  }
+  return inicios;
+}
+
+/**
+ * Interpreta lo que se acaba de pegar, ya listo para entrar en la cuadricula.
+ *
+ * Lo copiado de Excel trae tabuladores y es exacto. Lo copiado de un PDF, de
+ * un correo o de una pantalla viene alineado con espacios: si trae la fila de
+ * encabezados se usa para saber donde empieza cada columna, y esa fila se
+ * descarta para que no acabe como un empleado llamado "EMPLEADO".
+ */
+export function interpretarPegado(texto: string, columns: string[]): string[][] {
+  const bruto = texto.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+  if (!bruto) return [];
+
+  const lineas = bruto.split("\n");
+  if (lineas.some((linea) => linea.includes("\t"))) {
+    return sinEncabezadoRepetido(
+      lineas.map((linea) => linea.split("\t")),
+      columns,
+    );
+  }
+
+  // Alineado con espacios y con cabecera: cada trozo va a la columna que le
+  // toca por posicion, aunque por el camino haya celdas vacias.
+  const porEspacios = texto2D(bruto);
+  if (porEspacios.length > 1 && esFilaDeEncabezados(porEspacios[0], columns)) {
+    const inicios = iniciosDeColumna(lineas[0]);
+    if (inicios.length >= 2) {
+      return lineas.slice(1).map((linea) => repartirPorPosicion(linea, inicios));
+    }
+  }
+
+  return sinEncabezadoRepetido(porEspacios, columns);
+}
+
+/** Compara dos encabezados sin fijarse en tildes, mayusculas ni espacios. */
+function mismoEncabezado(uno: string, otro: string): boolean {
+  const llano = (valor: string) =>
+    valor
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  return llano(uno) === llano(otro);
+}
+
+/**
+ * Quita del bloque pegado la fila de encabezados, si la trae.
+ *
+ * Al copiar desde Excel casi siempre se arrastra la primera fila con los
+ * nombres de las columnas; sin esto acababa como un empleado llamado
+ * "EMPLEADO".
+ */
+export function sinEncabezadoRepetido(bloque: string[][], columns: string[]): string[][] {
+  if (bloque.length < 2) return bloque;
+  return esFilaDeEncabezados(bloque[0], columns) ? bloque.slice(1) : bloque;
+}
+
+/** true si esa fila son los nombres de las columnas, no datos. */
+function esFilaDeEncabezados(fila: string[], columns: string[]): boolean {
+  const conTexto = fila.filter((celda) => celda.trim()).length;
+  if (conTexto < 2) return false;
+
+  const coinciden = fila.filter((celda, indice) =>
+    celda.trim() && columns[indice] ? mismoEncabezado(celda, columns[indice]) : false,
+  ).length;
+
+  // Basta con que coincida la mayoria: puede faltar alguna columna del final.
+  return coinciden >= Math.ceil(conTexto / 2);
 }
 
 /**

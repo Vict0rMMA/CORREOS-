@@ -34,66 +34,89 @@ function clave(value: string): string {
 
 /**
  * Encabezados de las plantillas de AVX, tal y como aparecen en el modelo.
- * Cualquier columna que no este aqui la traduce el modelo.
+ *
+ * El orden importa: el primero de cada grupo es el nombre canonico, el que
+ * usan las plantillas. Los siguientes son sinonimos que se entienden al leer
+ * pero que nunca se escriben. Cualquier columna que no este aqui la traduce el
+ * modelo.
  */
 const ENCABEZADOS: Array<[string, string]> = [
-  ["empleado", "EMPLOYEE"],
-  ["almuerzo", "LUNCH"],
-  ["estado", "STATUS"],
-  ["avion", "A/C"],
-  ["aeronave", "A/C"],
-  ["avion 2", "A/C 2"],
-  ["puerta", "GATE"],
-  ["puerta 2", "GATE 2"],
-  ["hora asignado", "ASSGN @"],
-  ["hora asignada", "ASSGN @"],
-  ["hora salida", "ETD"],
-  ["hora de salida", "ETD"],
-  ["estacion", "STA"],
-  ["tripulacion", "CREW"],
-  ["tecnico avx", "AVX TECH"],
-  ["falla diferida", "MEL/NEF"],
-  ["n empleado", "EMP #"],
-  ["no empleado", "EMP #"],
-  ["numero de empleado", "EMP #"],
-  ["fecha", "DATE"],
-  ["turno", "SHIFT"],
-  ["supervisor", "SUPERVISOR"],
-  ["notas", "NOTES"],
-  ["tipo", "TYPE"],
-  ["nombre", "NAME"],
-  ["presente", "PRESENT"],
-  ["unidad", "UNIT"],
-  ["conductor", "DRIVER"],
-  ["personal del dia", "DAILY MANNING"],
-  ["horas extra y disponibles", "O/T & STANDBY"],
-  ["vehiculos", "VEHICLE LIST"],
+  ["EMPLEADO", "EMPLOYEE"],
+  ["ALMUERZO", "LUNCH"],
+  ["ESTADO", "STATUS"],
+  ["AVIÓN", "A/C"],
+  ["AERONAVE", "A/C"],
+  ["PUERTA", "GATE"],
+  ["HORA ASIGNADO", "ASSGN @"],
+  ["HORA ASIGNADA", "ASSGN @"],
+  ["HORA SALIDA", "ETD"],
+  ["HORA DE SALIDA", "ETD"],
+  ["ESTACIÓN", "STA"],
+  ["TRIPULACIÓN", "CREW"],
+  ["TÉCNICO AVX", "AVX TECH"],
+  ["FALLA DIFERIDA", "MEL/NEF"],
+  ["N.° EMPLEADO", "EMP #"],
+  ["NÚMERO DE EMPLEADO", "EMP #"],
+  ["FECHA", "DATE"],
+  ["TURNO", "SHIFT"],
+  ["SUPERVISOR", "SUPERVISOR"],
+  ["NOTAS", "NOTES"],
+  ["TIPO", "TYPE"],
+  ["NOMBRE", "NAME"],
+  ["PRESENTE", "PRESENT"],
+  ["UNIDAD", "UNIT"],
+  ["CONDUCTOR", "DRIVER"],
+  ["PERSONAL DEL DÍA", "DAILY MANNING"],
+  ["HORAS EXTRA Y DISPONIBLES", "O/T & STANDBY"],
+  ["VEHÍCULOS", "VEHICLE LIST"],
 ];
 
-const A_INGLES = new Map(ENCABEZADOS);
-/** El mismo mapa al reves, para cuando la planilla vuelve al espanol. */
-const A_ESPANOL = new Map(
-  ENCABEZADOS.map(([es, en]) => [clave(en), es.toUpperCase()] as [string, string]),
-);
+/**
+ * Los dos mapas, con una regla clara: gana el PRIMERO de cada grupo.
+ *
+ * Al invertir la lista sin mas, el ultimo sinonimo pisaba al canonico y "A/C"
+ * volvia como AERONAVE en vez de AVIÓN, o "EMP #" como NÚMERO DE EMPLEADO en
+ * vez de N.° EMPLEADO. Con `primeroGana` el ingles vuelve al nombre que de
+ * verdad lleva la plantilla.
+ */
+function primeroGana(pares: Array<[string, string]>): Map<string, string> {
+  const mapa = new Map<string, string>();
+  for (const [llave, valor] of pares) {
+    if (!mapa.has(llave)) mapa.set(llave, valor);
+  }
+  return mapa;
+}
+
+const A_INGLES = primeroGana(ENCABEZADOS.map(([es, en]) => [clave(es), en]));
+const A_ESPANOL = primeroGana(ENCABEZADOS.map(([es, en]) => [clave(en), es]));
+
+/** Columnas repetidas de la plantilla: "AVIÓN 2", "HORA ASIGNADO 3". */
+const NUMERADA = /^(.*\S)\s+(\d+)$/;
 
 /**
  * Traduce un encabezado conocido. Devuelve null si no esta en la plantilla:
  * esos los traduce el modelo.
  */
 export function traducirEncabezado(nombre: string, destino: Lang): string | null {
-  const llave = clave(nombre);
+  const texto = nombre.trim();
+  const llave = clave(texto);
   if (!llave) return null;
 
-  if (destino === "en") {
-    const directo = A_INGLES.get(llave);
-    if (directo) return directo;
-    // Ya venia en ingles: se deja como esta.
-    return A_ESPANOL.has(llave) ? nombre.toUpperCase() : null;
+  const directo = destino === "en" ? A_INGLES.get(llave) : A_ESPANOL.get(llave);
+  if (directo) return directo;
+
+  // Ya venia en el idioma de destino: se deja como esta.
+  const alReves = destino === "en" ? A_ESPANOL.get(llave) : A_INGLES.get(llave);
+  if (alReves) return texto.toUpperCase();
+
+  // "AVIÓN 2" se traduce por su base y se le devuelve el numero.
+  const numerada = NUMERADA.exec(texto);
+  if (numerada) {
+    const base = traducirEncabezado(numerada[1], destino);
+    if (base) return `${base} ${numerada[2]}`;
   }
 
-  const directo = A_ESPANOL.get(llave);
-  if (directo) return directo;
-  return A_INGLES.has(llave) ? nombre.toUpperCase() : null;
+  return null;
 }
 
 /**

@@ -46,11 +46,13 @@ informe.comprobar(
   opciones.join(" · "),
 );
 
+// Las columnas exactas de cada plantilla se comprueban en plantillas.mjs.
 informe.comprobar(
-  "Terminal trae sus columnas",
-  (await encabezados()).join("|") ===
-    "EMPLEADO|ALMUERZO|AVIÓN|PUERTA|HORA ASIGNADO|AVIÓN 2|PUERTA 2|NOTAS",
-  (await encabezados()).join(" · "),
+  "Terminal trae sus cuatro asignaciones",
+  (await encabezados()).length === 15 &&
+    (await encabezados())[0] === "EMPLEADO" &&
+    (await encabezados()).at(-1) === "NOTAS",
+  `${(await encabezados()).length} columnas`,
 );
 
 await selector.selectOption("hangar");
@@ -136,6 +138,49 @@ informe.comprobar(
   "y respeta los saltos de línea",
   (await celda(3, 0).innerText()) === "A. Díaz",
   await celda(3, 0).innerText(),
+);
+
+// --- 4b. Pegar algo copiado de una pantalla, separado por espacios ---
+await selector.selectOption("terminal");
+await page.waitForTimeout(300);
+
+// Las ocho primeras columnas de Terminal, alineadas con espacios como las
+// deja una tabla copiada de una pantalla o de un PDF.
+const ANCHOS = [12, 12, 10, 10, 16, 10, 10, 0];
+const alinear = (celdas) =>
+  celdas.map((c, i) => (ANCHOS[i] ? String(c).padEnd(ANCHOS[i]) : String(c))).join("").trimEnd();
+const conEspacios = [
+  alinear(["EMPLEADO", "ALMUERZO", "AVIÓN", "PUERTA", "HORA ASIGNADO", "AVIÓN 2", "PUERTA 2", "HORA ASIGNADO 2"]),
+  alinear(["J. Pérez", "12:00", "N123AV", "B4", "07:30", "", "", "09:00"]),
+  alinear(["M. Gómez", "12:30", "N789AV", "A1", "08:00", "N456AV", "C2", "09:30"]),
+].join(String.fromCharCode(10));
+
+await celda(0, 0).click();
+await page.evaluate((texto) => navigator.clipboard.writeText(texto), conEspacios);
+await page.keyboard.press("Control+V");
+await page.waitForTimeout(400);
+
+informe.comprobar(
+  "lo copiado con espacios también se reparte por columnas",
+  (await celda(0, 0).innerText()) === "J. Pérez" &&
+    (await celda(0, 2).innerText()) === "N123AV",
+  `${await celda(0, 0).innerText()} / ${await celda(0, 2).innerText()}`,
+);
+informe.comprobar(
+  "la fila de encabezados pegada no cuenta como un empleado",
+  (await celda(0, 0).innerText()) !== "EMPLEADO",
+);
+informe.comprobar(
+  "las columnas vacías se respetan y el dato cae en su sitio",
+  (await celda(0, 5).innerText()).trim() === "" &&
+    (await celda(0, 6).innerText()).trim() === "" &&
+    (await celda(0, 7).innerText()) === "09:00",
+  `col5="${(await celda(0, 5).innerText()).trim()}" col7="${await celda(0, 7).innerText()}"`,
+);
+informe.comprobar(
+  "y las que sí tienen dato también",
+  (await celda(1, 5).innerText()) === "N456AV" && (await celda(1, 6).innerText()) === "C2",
+  `${await celda(1, 5).innerText()} / ${await celda(1, 6).innerText()}`,
 );
 
 // --- 5. Pegar más filas de las que hay ---

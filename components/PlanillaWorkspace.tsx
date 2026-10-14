@@ -29,7 +29,8 @@ import {
   paraExportar,
   rehacer,
 } from "@/lib/planilla";
-import { PLANTILLAS, crearPlanilla } from "@/lib/plantillas";
+
+import { PLANTILLAS, crearPlanilla, esPlantillaIntacta } from "@/lib/plantillas";
 import type { Aviso } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
 import type { SheetDoc, SheetSection, SheetTemplateId, SignatureDrawing } from "@/types";
@@ -132,7 +133,9 @@ export function PlanillaWorkspace({
 
   const cambiarPlantilla = useCallback(
     (id: SheetTemplateId) => {
-      if (!estaVacia(entrada.presente)) {
+      // La de noches trae la flota y la numeracion puestas: "vacia" es que
+      // siga igual que recien creada, no que no tenga ni una celda escrita.
+      if (!esPlantillaIntacta(entrada.presente)) {
         const seguro = window.confirm(
           "Vas a cambiar de plantilla y la planilla que tienes escrita se pierde. ¿Seguimos?",
         );

@@ -19,8 +19,8 @@ import {
   limpiarRango,
   ordenar,
   pegarEn,
+  interpretarPegado,
   rangoATexto,
-  texto2D,
 } from "@/lib/planilla";
 import { cn } from "@/lib/utils";
 import type { SheetSection } from "@/types";
@@ -58,6 +58,28 @@ export interface CuadriculaProps {
 
 const ANCHO_POR_DEFECTO = 150;
 const ANCHO_MINIMO = 56;
+/** Ancho de la columna de numeros de fila; la primera columna se pega detras. */
+const COLUMNA_NUMEROS = 42;
+
+/**
+ * El fondo de una celda, elegido una sola vez.
+ *
+ * Si se apilan varias clases de color, cual gana depende del orden en que
+ * Tailwind las escriba, no del orden en que se pongan aqui. Eligiendo una se
+ * acaba la duda, y ademas la primera columna necesita un fondo opaco porque
+ * queda fija mientras el resto se desplaza por debajo.
+ */
+function fondoDeCelda(opciones: {
+  marcada: boolean;
+  conAviso: boolean;
+  alterna: boolean;
+  fija: boolean;
+}): string {
+  if (opciones.conAviso) return "bg-danger/15";
+  if (opciones.marcada) return "bg-accent-soft";
+  if (opciones.alterna) return opciones.fija ? "bg-surface-soft" : "bg-surface-soft/60";
+  return opciones.fija ? "bg-surface" : "";
+}
 
 export function Cuadricula({
   seccion,
@@ -254,7 +276,7 @@ export function Cuadricula({
     if (!texto) return;
     evento.preventDefault();
 
-    const bloque = texto2D(texto);
+    const bloque = interpretarPegado(texto, seccion.columns);
     if (bloque.length === 0) return;
 
     if (activa.fila === FILA_ENCABEZADO) {
@@ -386,7 +408,7 @@ export function Cuadricula({
           style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}
         >
           <colgroup>
-            <col style={{ width: 42 }} />
+            <col style={{ width: COLUMNA_NUMEROS }} />
             {seccion.columns.map((_, columna) => (
               <col key={columna} style={{ width: anchoDe(columna) }} />
             ))}
@@ -419,9 +441,11 @@ export function Cuadricula({
                     onPointerDown={alBajarPuntero(celda)}
                     onPointerEnter={alEntrarPuntero(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
+                    style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                     className={cn(
-                      "sticky top-0 z-20 border border-[#2b4572] bg-[#1f3864] p-0 text-left align-middle outline-none",
-                      marcada && "bg-[#2a4a84]",
+                      "sticky top-0 border border-[#2b4572] p-0 text-left align-middle outline-none",
+                      columna === 0 ? "z-30" : "z-20",
+                      marcada ? "bg-[#2a4a84]" : "bg-[#1f3864]",
                       enFoco && "ring-2 ring-inset ring-white/70",
                     )}
                   >
@@ -493,11 +517,19 @@ export function Cuadricula({
                       onPointerDown={alBajarPuntero(celda)}
                       onPointerEnter={alEntrarPuntero(celda)}
                       onDoubleClick={() => empezarAEditar(celda)}
+                      style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                       className={cn(
                         "border border-line p-0 align-middle outline-none",
-                        indiceFila % 2 === 1 && "bg-surface-soft/60",
-                        marcada && "bg-accent-soft",
-                        conAviso && "bg-danger/15 ring-1 ring-inset ring-danger/60",
+                        // Con quince o veinte columnas hay que desplazarse de
+                        // lado: el empleado se queda a la vista.
+                        columna === 0 && "sticky z-10 border-r-line-strong",
+                        fondoDeCelda({
+                          marcada,
+                          conAviso: Boolean(conAviso),
+                          alterna: indiceFila % 2 === 1,
+                          fija: columna === 0,
+                        }),
+                        conAviso && "ring-1 ring-inset ring-danger/60",
                         enFoco && "ring-2 ring-inset ring-accent",
                       )}
                     >
