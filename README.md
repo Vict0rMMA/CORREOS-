@@ -390,8 +390,9 @@ verdad.
 
 **Para activarlo:**
 
-1. Crear las tablas: en Supabase, *SQL Editor*, pegar y ejecutar
-   `supabase/migrations/20261014120000_planillas_y_guardados.sql`.
+1. Crear las tablas: en Supabase, *SQL Editor*, pegar y ejecutar los dos
+   archivos de `supabase/migrations/`, en orden. (En CORREOS ya estan
+   creadas.)
 2. Poner dos variables, en `.env.local` y en Vercel (*Settings > Environment
    Variables*), y volver a desplegar:
 
@@ -402,6 +403,14 @@ verdad.
 
    La clave secreta nunca va en una variable `NEXT_PUBLIC_` ni se pega en un
    chat.
+
+   Como CORREOS se creo desde Vercel, la integracion suele dejar puestas
+   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`: la aplicacion tambien las
+   acepta, asi que en Vercel puede que no haga falta anadir nada.
+
+**Las pruebas no tocan la nube.** Cada prueba ve las rutas de guardado como
+"no configuradas"; solo `pruebas/nube.mjs` habla con Supabase, y lo que crea
+lo deja marcado como borrado. Sin la clave, esa prueba se omite.
 
 **Ojo con el plan gratuito:** Supabase pausa un proyecto gratuito tras una
 semana sin uso. Si pasa, la aplicacion sigue funcionando con lo del navegador

@@ -19,6 +19,7 @@ const PRUEBAS = [
   { archivo: "pestanas.mjs", nombre: "Pestanas separadas", gasta: false },
   { archivo: "cuadricula.mjs", nombre: "Cuadricula de planillas", gasta: false },
   { archivo: "plantillas.mjs", nombre: "Plantillas y encabezados", gasta: false },
+  { archivo: "nube.mjs", nombre: "Guardado en la nube", gasta: false },
   { archivo: "idioma-documentos.mjs", nombre: "Documentos: idioma, logo y Excel", gasta: false },
   { archivo: "celular.mjs", nombre: "Celular e instalacion", gasta: true },
   { archivo: "tipos.mjs", nombre: "Tipos de texto", gasta: true },

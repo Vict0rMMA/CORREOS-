@@ -19,9 +19,19 @@ if (typeof window !== "undefined") {
 
 let cliente: SupabaseClient | null = null;
 
+/**
+ * La direccion y la clave del servidor.
+ *
+ * Se aceptan tambien los nombres que pone la integracion de Vercel con
+ * Supabase (el proyecto se creo desde Vercel): asi la version publicada
+ * funciona sin anadir nada a mano. La direccion no es secreta, por eso vale
+ * tambien la NEXT_PUBLIC_; la clave, nunca.
+ */
 function configuracion(): { url: string; clave: string } | null {
-  const url = process.env.SUPABASE_URL?.trim();
-  const clave = process.env.SUPABASE_SECRET_KEY?.trim();
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
+  const clave = (
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+  )?.trim();
   if (!url || !clave) return null;
   return { url, clave };
 }

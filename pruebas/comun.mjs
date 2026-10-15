@@ -40,8 +40,32 @@ export function buscarChrome() {
   return encontrado;
 }
 
-export async function abrirNavegador(opciones = {}) {
-  return chromium.launch({ executablePath: buscarChrome(), ...opciones });
+/**
+ * Abre Chrome para las pruebas.
+ *
+ * Por defecto las pruebas NO tocan la nube: cada pagina ve las rutas de
+ * guardado como "no configuradas". Sin esto, la app subia a la base real de
+ * Paula los correos de mentira que siembran las pruebas (120 de una vez) y
+ * las planillas de prueba. Solo la prueba de la nube pasa `{ nube: true }`.
+ */
+export async function abrirNavegador({ nube = false, ...opciones } = {}) {
+  const navegador = await chromium.launch({ executablePath: buscarChrome(), ...opciones });
+  if (nube) return navegador;
+
+  const nuevoContexto = navegador.newContext.bind(navegador);
+  navegador.newContext = async (...argumentos) => {
+    const contexto = await nuevoContexto(...argumentos);
+    const sinNube = (ruta) =>
+      ruta.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ disponible: false, error: "Sin nube en las pruebas." }),
+      });
+    await contexto.route("**/api/guardados**", sinNube);
+    await contexto.route("**/api/planillas**", sinNube);
+    return contexto;
+  };
+  return navegador;
 }
 
 /** Lleva la cuenta de lo que pasa y sale con error si algo falla. */
