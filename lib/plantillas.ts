@@ -22,6 +22,16 @@ export interface BloquePlantilla {
    * asignaciones de nadie.
    */
   datos?: string[][];
+  /**
+   * Como se presenta el bloque en pantalla: un nombre grande, un icono y una
+   * linea que dice que hay que escribir. Solo es para ayudar a llenarla; no
+   * sale en el Excel.
+   */
+  cabecera?: {
+    nombre: string;
+    icono: "aviones" | "personal" | "extras" | "vehiculos";
+    ayuda: string;
+  };
 }
 
 export interface Plantilla {
@@ -124,24 +134,44 @@ export const PLANTILLAS: Plantilla[] = [
           "N.° EMPLEADO",
           "HORA ASIGNADO",
         ],
+        cabecera: {
+          nombre: "AVIONES DE LA NOCHE",
+          icono: "aviones",
+          ayuda: "Un avión por fila: tipo, matrícula, estación, puerta y el técnico asignado.",
+        },
       },
       {
         title: "PERSONAL DEL DÍA",
         columns: ["#", "NOMBRE", "PRESENTE"],
         rows: 17,
         datos: numeradas(17, 3),
+        cabecera: {
+          nombre: "PERSONAL DEL DÍA",
+          icono: "personal",
+          ayuda: "Quién está hoy: escribe el nombre y SÍ o NO en PRESENTE.",
+        },
       },
       {
         title: "HORAS EXTRA Y DISPONIBLES",
         columns: ["#", "NOMBRE", "TIPO"],
         rows: 6,
         datos: numeradas(6, 3),
+        cabecera: {
+          nombre: "HORAS EXTRA Y DISPONIBLES",
+          icono: "extras",
+          ayuda: "Quién hace horas extra o queda disponible: nombre y HORA EXTRA o DISPONIBLE.",
+        },
       },
       {
         title: "VEHÍCULOS",
         columns: ["UNIDAD", "CONDUCTOR", "TIPO"],
         rows: 7,
         datos: VEHICULOS.map(([unidad, tipo]) => [unidad, "", tipo]),
+        cabecera: {
+          nombre: "VEHÍCULOS",
+          icono: "vehiculos",
+          ayuda: "La flota ya está puesta: solo escribe quién conduce cada unidad.",
+        },
       },
     ],
   },

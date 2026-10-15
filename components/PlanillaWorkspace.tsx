@@ -6,15 +6,19 @@ import {
   Check,
   Cloud,
   CloudOff,
+  Clock,
   FileDown,
   FilePlus2,
   FileText,
   Languages,
   MoveRight,
+  Plane,
   Printer,
   Redo2,
   Sheet as SheetIcon,
+  Truck,
   Undo2,
+  Users,
 } from "lucide-react";
 import { Cuadricula } from "@/components/Cuadricula";
 import { MisPlanillas } from "@/components/MisPlanillas";
@@ -43,7 +47,14 @@ import {
   listarPlanillas,
   nuevoId,
 } from "@/lib/nube";
-import { PLANTILLAS, crearPlanilla, esPlantillaIntacta, fechaDeHoy } from "@/lib/plantillas";
+import {
+  type BloquePlantilla,
+  PLANTILLAS,
+  buscarPlantilla,
+  crearPlanilla,
+  esPlantillaIntacta,
+  fechaDeHoy,
+} from "@/lib/plantillas";
 import type { Aviso } from "@/lib/tabla";
 import { cn } from "@/lib/utils";
 import type { SheetDoc, SheetSection, SheetTemplateId, SignatureDrawing } from "@/types";
@@ -686,9 +697,14 @@ export function PlanillaWorkspace({
         </div>
 
         {doc.sections.map((seccion, indice) => (
-          <div key={indice} className="flex flex-col gap-2">
-            {seccion.title ? (
-              <h3 className="eyebrow border-t border-line pt-3">{seccion.title}</h3>
+          <div key={indice} className={cn("flex flex-col gap-2.5", indice > 0 && "mt-4")}>
+            {doc.sections.length > 1 ? (
+              <CabeceraBloque
+                cabecera={buscarPlantilla(doc.template).sections[indice]?.cabecera}
+                titulo={seccion.title}
+                numero={indice + 1}
+                total={doc.sections.length}
+              />
             ) : null}
             <Cuadricula
               seccion={seccion}
@@ -786,6 +802,64 @@ export function PlanillaWorkspace({
           onBorrar={(id) => void borrarGuardada(id)}
         />
       ) : null}
+    </div>
+  );
+}
+
+const ICONOS_DE_BLOQUE = {
+  aviones: Plane,
+  personal: Users,
+  extras: Clock,
+  vehiculos: Truck,
+} as const;
+
+/**
+ * La cabecera de cada bloque de la planilla.
+ *
+ * En la de noches hay cuatro tablas seguidas, y con un titulo pequeno en gris
+ * no se veia que eran cosas distintas que llenar. Cada una lleva su icono, un
+ * titulo grande, en que bloque se va ("2 de 4") y una linea que dice que hay
+ * que escribir.
+ */
+function CabeceraBloque({
+  cabecera,
+  titulo,
+  numero,
+  total,
+}: {
+  cabecera?: BloquePlantilla["cabecera"];
+  /** El titulo del bloque tal como sale en el documento (o vacio). */
+  titulo: string;
+  numero: number;
+  total: number;
+}) {
+  const nombre = cabecera?.nombre ?? titulo;
+  if (!nombre) return null;
+  const Icono = ICONOS_DE_BLOQUE[cabecera?.icono ?? "aviones"];
+
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-accent/25 bg-accent-soft/50 px-3 py-3 sm:items-center sm:px-4">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent text-accent-ink shadow-[0_6px_18px_-8px_var(--accent-glow)]">
+        <Icono aria-hidden className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
+          Bloque {numero} de {total}
+        </p>
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+          <h3 className="text-[19px] font-semibold leading-tight tracking-[0.02em] text-ink sm:text-[21px]">
+            {nombre}
+          </h3>
+          {titulo && titulo !== nombre ? (
+            <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-muted">
+              En el Excel: {titulo}
+            </span>
+          ) : null}
+        </div>
+        {cabecera?.ayuda ? (
+          <p className="mt-1 text-[13px] leading-snug text-ink-soft">{cabecera.ayuda}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
