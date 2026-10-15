@@ -363,6 +363,79 @@ await page.getByRole("button", { name: /^− Columna/ }).click();
 await page.waitForTimeout(200);
 informe.comprobar("se quita una columna", (await encabezados()).length === columnasAntes);
 
+// --- 9b. Ratón: arrastrar para marcar, y Copiar/Pegar con el clic derecho ---
+// El menú del navegador no se puede pulsar desde una prueba. Se comprueba lo
+// que el menú necesita para ofrecer Copiar y Pegar (un campo escribible,
+// enfocado y con lo marcado seleccionado bajo el ratón) y después se lanzan
+// los mismos eventos que lanza el menú al elegir cada opción.
+await celda(6, 0).click();
+await page.evaluate(
+  (texto) => navigator.clipboard.writeText(texto),
+  ["R1", "S1", "T1"].join("\t") + "\n" + ["R2", "S2", "T2"].join("\t"),
+);
+await page.keyboard.press("Control+V");
+await page.waitForTimeout(300);
+
+const origen = await celda(6, 0).boundingBox();
+const final = await celda(7, 2).boundingBox();
+await page.mouse.move(origen.x + 20, origen.y + 10);
+await page.mouse.down();
+await page.mouse.move(final.x + 20, final.y + 10, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(150);
+informe.comprobar(
+  "arrastrar con el ratón marca un bloque",
+  (await tabla().locator('td[aria-selected="true"]').count()) === 6,
+  `${await tabla().locator('td[aria-selected="true"]').count()} casillas`,
+);
+
+await page.mouse.click(final.x + 20, final.y + 10, { button: "right" });
+await page.waitForTimeout(150);
+const bajoElRaton = await page.evaluate(([x, y]) => {
+  const elemento = document.elementFromPoint(x, y);
+  return {
+    escribible: elemento?.tagName === "TEXTAREA" && document.activeElement === elemento,
+    seleccionado:
+      elemento?.tagName === "TEXTAREA"
+        ? elemento.value.slice(elemento.selectionStart, elemento.selectionEnd)
+        : "",
+  };
+}, [final.x + 20, final.y + 10]);
+informe.comprobar(
+  "con el clic derecho el menú ofrece Pegar (hay un campo bajo el ratón)",
+  bajoElRaton.escribible,
+);
+informe.comprobar(
+  "y ofrece Copiar, con lo marcado ya seleccionado",
+  bajoElRaton.seleccionado.split("\n").length === 2,
+  JSON.stringify(bajoElRaton.seleccionado),
+);
+
+await page.evaluate(() => document.execCommand("copy"));
+await page.waitForTimeout(200);
+informe.comprobar(
+  "Copiar del menú copia el bloque marcado",
+  (await page.evaluate(() => navigator.clipboard.readText())).replace(/\r/g, "") ===
+    "R1\tS1\tT1\nR2\tS2\tT2",
+);
+
+const destino = await celda(8, 0).boundingBox();
+await page.mouse.click(destino.x + 20, destino.y + 10, { button: "right" });
+await page.waitForTimeout(150);
+await page.evaluate(() => {
+  const datos = new DataTransfer();
+  datos.setData("text/plain", ["V. Gil", "14:00", "N999AV"].join("\t"));
+  document.activeElement.dispatchEvent(
+    new ClipboardEvent("paste", { clipboardData: datos, bubbles: true, cancelable: true }),
+  );
+});
+await page.waitForTimeout(300);
+informe.comprobar(
+  "Pegar del menú pega en la casilla del clic derecho, repartido",
+  (await celda(8, 0).innerText()) === "V. Gil" && (await celda(8, 2).innerText()) === "N999AV",
+  `${await celda(8, 0).innerText()} / ${await celda(8, 2).innerText()}`,
+);
+
 // --- 10. Nada se sale de la pantalla en el celular ---
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(400);

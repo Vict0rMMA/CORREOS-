@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { ClipboardPaste, Copy, PencilLine, Table2 } from "lucide-react";
 import { readClipboard, writeClipboardTable } from "@/lib/clipboard";
 import {
@@ -461,6 +462,83 @@ export function Cuadricula({
     if (toque.current.tipo === "touch" || toque.current.yaActiva) empezarAEditar(celda);
   };
 
+  // --- clic derecho: Copiar, Cortar y Pegar del menu del navegador ---
+  // El menu del navegador solo ofrece Pegar si debajo del raton hay algo
+  // donde se pueda escribir, y Copiar si hay texto seleccionado. Una casilla
+  // no es ninguna de las dos cosas, asi que "Pegar" salia en gris. Al hacer
+  // clic derecho se pone debajo del raton un campo invisible con lo marcado
+  // ya seleccionado dentro: el menu ve un campo y habilita las tres opciones,
+  // y aqui se recoge lo que la persona elija. (Es lo que hacen los editores de
+  // codigo del navegador.)
+  const captura = useRef<HTMLTextAreaElement>(null);
+  /**
+   * El campo va directamente en <body>: el panel de la planilla tiene efecto
+   * de cristal (backdrop-filter), y dentro de el un elemento "fixed" se
+   * coloca respecto al panel y no a la pantalla, lejos del raton.
+   */
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+
+  /** Lo marcado ahora, como texto y como tabla para el correo. */
+  const textoDeSeleccion = () =>
+    seleccion.fila1 === FILA_ENCABEZADO
+      ? seccion.columns.slice(seleccion.col1, seleccion.col2 + 1).join("\t")
+      : rangoATexto(seccion, seleccion);
+
+  const esconderCaptura = () => {
+    const campo = captura.current;
+    if (!campo) return;
+    campo.style.left = "-9999px";
+    campo.style.top = "-9999px";
+  };
+
+  const alMenuContextual = (celda: Celda) => (evento: MouseEvent<HTMLElement>) => {
+    if (editando) return;
+    // Como en Excel: el clic derecho fuera de lo marcado marca esa casilla.
+    let texto: string;
+    if (dentroDeSeleccion(celda.fila, celda.columna)) {
+      texto = textoDeSeleccion();
+    } else {
+      setActiva(celda);
+      setExtremo(celda);
+      texto = valorDe(celda);
+    }
+
+    const campo = captura.current;
+    if (!campo) return;
+    campo.value = texto;
+    campo.style.left = `${evento.clientX - 12}px`;
+    campo.style.top = `${evento.clientY - 12}px`;
+    campo.focus({ preventScroll: true });
+    campo.select();
+    // Sin preventDefault: el menu del navegador se abre sobre el campo.
+  };
+
+  const alCopiarCaptura = (evento: ClipboardEvent<HTMLTextAreaElement>) => {
+    evento.preventDefault();
+    const texto = textoDeSeleccion();
+    evento.clipboardData.setData("text/plain", texto);
+    evento.clipboardData.setData(
+      "text/html",
+      bloqueAHtml(null, texto.split("\n").map((linea) => linea.split("\t"))),
+    );
+    esconderCaptura();
+    enfocar(activa);
+  };
+
+  const alCortarCaptura = (evento: ClipboardEvent<HTMLTextAreaElement>) => {
+    alCopiarCaptura(evento);
+    if (readOnly || seleccion.fila1 === FILA_ENCABEZADO) return;
+    onChange(limpiarRango(seccion, seleccion));
+  };
+
+  const alPegarCaptura = (evento: ClipboardEvent<HTMLTextAreaElement>) => {
+    evento.preventDefault();
+    esconderCaptura();
+    pegarTexto(evento.clipboardData.getData("text/plain"));
+    enfocar(activa);
+  };
+
   const alEntrarPuntero = (celda: Celda) => () => {
     if (!arrastrando.current) return;
     // Encabezados y datos no se seleccionan a la vez.
@@ -617,6 +695,32 @@ export function Cuadricula({
         onPaste={alPegar}
         className="scroll-slim max-h-[58vh] overflow-auto rounded-xl border border-line bg-surface"
       >
+        {/* El campo invisible del clic derecho (ver alMenuContextual). */}
+        {montado ? createPortal(
+        <textarea
+          ref={captura}
+          aria-hidden
+          tabIndex={-1}
+          readOnly={false}
+          onCopy={alCopiarCaptura}
+          onCut={alCortarCaptura}
+          onPaste={(evento) => {
+            evento.stopPropagation();
+            alPegarCaptura(evento);
+          }}
+          onBlur={esconderCaptura}
+          onKeyDown={(evento) => {
+            // Con el menu cerrado, las teclas vuelven a la tabla.
+            if (evento.ctrlKey || evento.metaKey) return;
+            evento.preventDefault();
+            esconderCaptura();
+            enfocar(activa);
+          }}
+          className="fixed z-[60] size-6 resize-none overflow-hidden border-0 bg-transparent p-0 text-transparent opacity-0 outline-none"
+          style={{ left: -9999, top: -9999 }}
+        />,
+        document.body,
+        ) : null}
         <table
           className="border-collapse text-[13px]"
           style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}
@@ -655,6 +759,7 @@ export function Cuadricula({
                     onPointerDown={alBajarPuntero(celda)}
                     onPointerEnter={alEntrarPuntero(celda)}
                     onClick={alPulsar(celda)}
+                    onContextMenu={alMenuContextual(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
                     style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                     className={cn(
@@ -732,6 +837,7 @@ export function Cuadricula({
                       onPointerDown={alBajarPuntero(celda)}
                       onPointerEnter={alEntrarPuntero(celda)}
                       onClick={alPulsar(celda)}
+                    onContextMenu={alMenuContextual(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
                       style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
                       className={cn(
