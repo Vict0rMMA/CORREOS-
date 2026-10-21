@@ -56,6 +56,7 @@ import {
   fechaDeHoy,
 } from "@/lib/plantillas";
 import type { Aviso } from "@/lib/tabla";
+import { loadSheetInProgress, saveSheetInProgress } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import type { SheetDoc, SheetSection, SheetTemplateId, SignatureDrawing } from "@/types";
 
@@ -152,13 +153,51 @@ export function PlanillaWorkspace({
     setAnchos({});
   }, []);
 
-  // Al abrir: si hay una planilla de hoy a medias, se sigue con ella.
+  /**
+   * false hasta haber leido la copia de este navegador. Sin esta guarda, la
+   * planilla en blanco del primer pintado se guardaba encima de la que habia
+   * y recargar la pagina la borraba.
+   */
+  const [leida, setLeida] = useState(false);
+  /** Cuando se edito de verdad por ultima vez (abrir no cuenta). */
+  const editadaEn = useRef(0);
+
+  // Al abrir: primero la copia de este navegador (sobrevive a recargar,
+  // haya nube o no); si no hay, la planilla de hoy que este en la nube.
   useEffect(() => {
     let cancelado = false;
+    const local = loadSheetInProgress();
+    if (local) {
+      cargar(local.id, local.entrada, local.salida);
+      setVista(local.vista);
+      setDesactualizado(local.desactualizado);
+      // Lo que no llego a subir (se recargo antes de tiempo o no habia
+      // internet) se sube en cuanto haya nube.
+      hayCambios.current = local.pendiente;
+      editadaEn.current = local.editadaEn;
+    }
+    setLeida(true);
+
     void (async () => {
       const lista = await refrescarLista();
       if (cancelado || !lista) return;
-      setEstadoNube("guardada");
+      setEstadoNube(local?.pendiente ? "esperando" : "guardada");
+
+      if (local) {
+        // Si esta misma planilla se cambio despues desde otro equipo, y aqui
+        // no hay nada pendiente, manda la de la nube.
+        const enNube = lista.find((planilla) => planilla.id === local.id);
+        const masNueva =
+          enNube && new Date(enNube.actualizadaEn).getTime() > local.editadaEn + 2000;
+        if (masNueva && !local.pendiente) {
+          const guardada = await abrirPlanilla(local.id);
+          if (cancelado || !guardada) return;
+          cargar(guardada.id, guardada.entrada, guardada.salida);
+          setGuardadaEn(guardada.actualizadaEn);
+        }
+        return;
+      }
+
       const ultima = lista[0];
       if (!ultima) return;
       const deHoy = new Date(ultima.actualizadaEn).toDateString() === new Date().toDateString();
@@ -172,6 +211,27 @@ export function PlanillaWorkspace({
       cancelado = true;
     };
   }, [cargar, refrescarLista]);
+
+  /** La copia de este navegador, tal como esta ahora. */
+  const copiaLocal = useCallback(
+    (pendiente: boolean) => ({
+      id: idPlanilla,
+      entrada: entrada.presente,
+      salida: salida?.presente ?? null,
+      vista,
+      desactualizado,
+      editadaEn: editadaEn.current,
+      pendiente,
+    }),
+    [desactualizado, entrada.presente, idPlanilla, salida, vista],
+  );
+
+  // La copia de este navegador se guarda al momento, con cada cambio.
+  useEffect(() => {
+    if (!leida) return;
+    if (hayCambios.current) editadaEn.current = Date.now();
+    saveSheetInProgress(copiaLocal(hayCambios.current));
+  }, [copiaLocal, leida]);
 
   /**
    * Guarda ya lo que haya pendiente. Se llama antes de cambiar de planilla:
@@ -189,11 +249,12 @@ export function PlanillaWorkspace({
       return false;
     }
     hayCambios.current = false;
+    saveSheetInProgress(copiaLocal(false));
     setEstadoNube("guardada");
     setGuardadaEn(hora);
     void refrescarLista();
     return true;
-  }, [entrada.presente, idPlanilla, misPlanillas, refrescarLista, salida]);
+  }, [copiaLocal, entrada.presente, idPlanilla, misPlanillas, refrescarLista, salida]);
 
   // Se guarda sola, un momento despues del ultimo cambio.
   useEffect(() => {

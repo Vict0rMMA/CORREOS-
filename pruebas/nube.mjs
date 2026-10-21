@@ -94,6 +94,8 @@ informe.comprobar(
 );
 
 // --- Se cierra y se vuelve: sigue ahí ---
+// Sin la copia del navegador, para que lo que vuelva venga de la nube.
+await page.evaluate(() => localStorage.removeItem("paula:planilla"));
 await page.reload({ waitUntil: "domcontentloaded" });
 await page.waitForTimeout(3500);
 await page.getByRole("tab", { name: /Planillas/ }).click();

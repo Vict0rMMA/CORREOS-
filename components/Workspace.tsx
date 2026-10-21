@@ -47,10 +47,12 @@ import {
   loadDraft,
   loadHistory,
   loadPrefs,
+  loadResult,
   loadSignatureImage,
   saveDraft,
   saveHistory,
   savePrefs,
+  saveResult,
   saveSignatureImage,
 } from "@/lib/storage";
 import type {
@@ -146,6 +148,14 @@ export function Workspace() {
     });
     setSeccion(guardadas.seccion);
     setText(loadDraft());
+    // El ultimo resultado tambien vuelve: recargar la pagina no lo borra.
+    const resultado = loadResult();
+    if (resultado) {
+      setOutput(resultado.output);
+      setSubject(resultado.subject);
+      setOutputLang(resultado.outputLang);
+      if (resultado.output.trim()) setStatus("done");
+    }
     const guardada = loadSignatureImage();
     if (guardada?.deSerie) {
       // Venia del archivo de la aplicacion: si ese archivo ya no esta, se
@@ -198,6 +208,17 @@ export function Workspace() {
     const timer = window.setTimeout(() => saveDraft(text), 400);
     return () => window.clearTimeout(timer);
   }, [text]);
+
+  // El resultado y el asunto se guardan en el navegador. Mientras la IA
+  // esta escribiendo no: se guarda el texto ya terminado.
+  useEffect(() => {
+    if (!hydrated || status === "loading") return;
+    const timer = window.setTimeout(
+      () => saveResult({ output, subject, outputLang }),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [hydrated, output, outputLang, status, subject]);
 
   const updatePrefs = useCallback((patch: Partial<Prefs>) => {
     setPrefs((current) => ({ ...current, ...patch }));

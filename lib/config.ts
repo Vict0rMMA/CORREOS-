@@ -29,6 +29,10 @@ export const STORAGE_KEYS = {
   prefs: "paula:prefs",
   history: "paula:history",
   draft: "paula:draft",
+  // Lo que hay en pantalla, para que recargar la pagina no lo borre: el
+  // ultimo resultado de Correos y la planilla abierta.
+  result: "paula:resultado",
+  sheet: "paula:planilla",
   // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
   // El numero sube cuando hay que descartar lo guardado en los navegadores:
   // asi nadie se queda con una firma que ya no corresponde.

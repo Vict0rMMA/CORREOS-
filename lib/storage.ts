@@ -1,6 +1,7 @@
 import { isTextType, isTone } from "@/lib/actions";
 import { DEFAULT_SIGNATURE, HISTORY_LIMIT, STORAGE_KEYS } from "@/lib/config";
-import type { HistoryItem, Prefs, Seccion, SignatureDrawing } from "@/types";
+import { esPlanillaValida } from "@/lib/planilla";
+import type { HistoryItem, Lang, Prefs, SheetDoc, SignatureDrawing } from "@/types";
 
 /**
  * Persistencia local. Todo va envuelto en try/catch porque localStorage
@@ -146,4 +147,82 @@ export function clearHistory(): void {
   } catch {
     /* ignorado */
   }
+}
+
+// ---------------------------------------------------------------------------
+// Lo que hay en pantalla, para que recargar no lo borre
+// ---------------------------------------------------------------------------
+
+/** El ultimo resultado de la pestana Correos. */
+export interface ResultadoGuardado {
+  output: string;
+  subject: string;
+  outputLang: Lang;
+}
+
+export function loadResult(): ResultadoGuardado | null {
+  const guardado = read<Partial<ResultadoGuardado>>(STORAGE_KEYS.result);
+  if (!guardado) return null;
+  const output = typeof guardado.output === "string" ? guardado.output : "";
+  const subject = typeof guardado.subject === "string" ? guardado.subject : "";
+  if (!output.trim() && !subject.trim()) return null;
+  return {
+    output,
+    subject,
+    outputLang: guardado.outputLang === "en" ? "en" : "es",
+  };
+}
+
+export function saveResult(resultado: ResultadoGuardado | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (resultado && (resultado.output.trim() || resultado.subject.trim())) {
+      window.localStorage.setItem(STORAGE_KEYS.result, JSON.stringify(resultado));
+    } else {
+      window.localStorage.removeItem(STORAGE_KEYS.result);
+    }
+  } catch {
+    /* sin espacio: lo de pantalla no se pierde, solo no sobrevive a recargar */
+  }
+}
+
+/**
+ * La planilla abierta, tal cual esta en pantalla.
+ *
+ * Es la copia de trabajo de este navegador: sobrevive a recargar la pagina
+ * aunque no haya nube (o no haya internet). Con nube, ademas se guarda alla.
+ */
+export interface PlanillaEnCurso {
+  id: string;
+  entrada: SheetDoc;
+  salida: SheetDoc | null;
+  vista: "es" | "en";
+  desactualizado: boolean;
+  /** Cuando se toco por ultima vez en este navegador (ms). */
+  editadaEn: number;
+  /** true si hay cambios que todavia no llegaron a la nube. */
+  pendiente: boolean;
+}
+
+export function loadSheetInProgress(): PlanillaEnCurso | null {
+  const guardada = read<Partial<PlanillaEnCurso>>(STORAGE_KEYS.sheet);
+  if (!guardada || typeof guardada.id !== "string") return null;
+  // Lo guardado puede venir de una version anterior: si no tiene la forma de
+  // una planilla, se descarta en vez de romper la pantalla.
+  if (!esPlanillaValida(guardada.entrada)) return null;
+  const salida = guardada.salida ?? null;
+  if (salida !== null && !esPlanillaValida(salida)) return null;
+  return {
+    id: guardada.id,
+    entrada: guardada.entrada,
+    salida,
+    vista: guardada.vista === "en" && salida ? "en" : "es",
+    desactualizado: guardada.desactualizado === true,
+    editadaEn: typeof guardada.editadaEn === "number" ? guardada.editadaEn : 0,
+    pendiente: guardada.pendiente === true,
+  };
+}
+
+export function saveSheetInProgress(planilla: PlanillaEnCurso): void {
+  write(STORAGE_KEYS.sheet, planilla);
 }
