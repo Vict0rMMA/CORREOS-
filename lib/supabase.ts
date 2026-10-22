@@ -20,18 +20,42 @@ if (typeof window !== "undefined") {
 let cliente: SupabaseClient | null = null;
 
 /**
+ * Busca una variable por como termina su nombre: la integracion de Vercel con
+ * Supabase deja ponerles un prefijo (CORREOS_SUPABASE_URL, STORAGE_...), y
+ * asi vale cualquiera. Las NEXT_PUBLIC_ solo sirven para la direccion, que no
+ * es secreta; una clave con ese prefijo se ignora.
+ */
+function variable(terminaciones: string[], publicaVale: boolean): string | undefined {
+  for (const terminacion of terminaciones) {
+    const exacta = process.env[terminacion]?.trim();
+    if (exacta) return exacta;
+  }
+  for (const [nombre, valor] of Object.entries(process.env)) {
+    if (!valor?.trim()) continue;
+    if (!publicaVale && nombre.startsWith("NEXT_PUBLIC_")) continue;
+    if (terminaciones.some((terminacion) => nombre.endsWith(`_${terminacion}`))) {
+      return valor.trim();
+    }
+  }
+  return undefined;
+}
+
+/**
  * La direccion y la clave del servidor.
  *
  * Se aceptan tambien los nombres que pone la integracion de Vercel con
  * Supabase (el proyecto se creo desde Vercel): asi la version publicada
- * funciona sin anadir nada a mano. La direccion no es secreta, por eso vale
- * tambien la NEXT_PUBLIC_; la clave, nunca.
+ * funciona sin anadir nada a mano.
  */
+function leerVariables(): { url?: string; clave?: string } {
+  return {
+    url: variable(["SUPABASE_URL"], true),
+    clave: variable(["SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY"], false),
+  };
+}
+
 function configuracion(): { url: string; clave: string } | null {
-  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)?.trim();
-  const clave = (
-    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
-  )?.trim();
+  const { url, clave } = leerVariables();
   if (!url || !clave) return null;
   return { url, clave };
 }
@@ -59,8 +83,17 @@ export function supabaseServidor(): SupabaseClient | null {
 }
 
 /** Respuesta comun cuando la nube no esta configurada o no responde. */
-export function sinNube(motivo = "La nube no está configurada."): Response {
+export function sinNube(motivo = motivoSinNube()): Response {
   return Response.json({ disponible: false, error: motivo }, { status: 503 });
+}
+
+/** Que falta, por su nombre (nunca su valor), para saber que poner en Vercel. */
+function motivoSinNube(): string {
+  const { url, clave } = leerVariables();
+  if (!url && !clave) return "La nube no está configurada: faltan SUPABASE_URL y SUPABASE_SECRET_KEY.";
+  if (!url) return "La nube no está configurada: falta SUPABASE_URL.";
+  if (!clave) return "La nube no está configurada: falta SUPABASE_SECRET_KEY.";
+  return "La nube no está configurada.";
 }
 
 /** Traduce un fallo de Supabase sin filtrar detalles al navegador. */

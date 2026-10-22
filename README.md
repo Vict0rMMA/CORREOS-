@@ -394,6 +394,12 @@ correos y las planillas guardadas viven en el navegador. Con Supabase:
   equipos para reabrirlas.
 - **Los correos guardados se suben a la nube**, tambien los que ya estaban en
   el navegador, asi no se pierden si se limpia.
+- **Una sola aplicacion en todos los equipos.** La usa la misma persona en el
+  celular y en el computador, y ve lo mismo en los dos. Lo que se hizo en un
+  equipo sin conexion (o antes de configurar la nube) sube solo la proxima
+  vez que se abre la aplicacion, con la hora en que se modifico de verdad.
+  Lo que se borra en un equipo desaparece tambien de los otros y no vuelve a
+  subir desde la copia que tenian.
 
 **Como esta protegido, sin inicio de sesion.** El navegador nunca habla con la
 base: lo hace el servidor de la aplicacion con la clave secreta, que no sale
@@ -420,8 +426,11 @@ verdad.
    chat.
 
    Como CORREOS se creo desde Vercel, la integracion suele dejar puestas
-   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`: la aplicacion tambien las
-   acepta, asi que en Vercel puede que no haga falta anadir nada.
+   `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` (a veces con un prefijo,
+   como `STORAGE_SUPABASE_URL`): la aplicacion tambien las acepta, asi que
+   en Vercel puede que no haga falta anadir nada. Para saber si ya ve la
+   nube, abrir `/api/planillas`: si falta algo, dice el nombre de lo que
+   falta.
 
 **Las pruebas no tocan la nube.** Cada prueba ve las rutas de guardado como
 "no configuradas"; solo `pruebas/nube.mjs` habla con Supabase, y lo que crea

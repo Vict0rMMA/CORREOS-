@@ -136,10 +136,13 @@ export function Workspace() {
 
     // Lo guardado en la nube manda. Lo que solo estaba en este navegador se
     // sube la primera vez, para que no se pierda si se limpia el navegador.
-    void listarGuardados().then((enNube) => {
-      if (!enNube) return;
+    void listarGuardados().then((nube) => {
+      if (!nube) return;
+      const enNube = nube.guardados;
       const ids = new Set(enNube.map((item) => item.id));
-      const soloLocales = locales.filter((item) => !ids.has(item.id));
+      // Lo que se borro desde otro equipo tambien se va de este.
+      const borrados = new Set(nube.borrados);
+      const soloLocales = locales.filter((item) => !ids.has(item.id) && !borrados.has(item.id));
       if (soloLocales.length > 0) void subirGuardados(soloLocales);
       const todos = [...enNube, ...soloLocales]
         .sort((a, b) => b.createdAt - a.createdAt)

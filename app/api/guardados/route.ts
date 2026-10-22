@@ -93,9 +93,20 @@ export async function GET(): Promise<Response> {
     .limit(HISTORY_LIMIT);
 
   if (error) return falloDeNube(error, "leer los guardados");
+
+  // Los borrados desde otro equipo: el navegador los quita de su copia en
+  // vez de volver a subirlos.
+  const { data: borrados } = await supabase
+    .from("guardados")
+    .select("id")
+    .not("borrado_en", "is", null)
+    .order("borrado_en", { ascending: false })
+    .limit(500);
+
   return Response.json({
     disponible: true,
     guardados: ((data ?? []) as Fila[]).map(aGuardado),
+    borrados: (borrados ?? []).map((fila) => fila.id),
   });
 }
 
@@ -126,7 +137,9 @@ export async function POST(request: Request): Promise<Response> {
 
   const { error } = await supabase
     .from("guardados")
-    .upsert(validos.map(aFila), { onConflict: "id" });
+    // Un correo guardado no cambia: si ya estaba se deja como esta. Asi uno
+    // borrado desde otro equipo no revive al subir la copia de este.
+    .upsert(validos.map(aFila), { onConflict: "id", ignoreDuplicates: true });
 
   if (error) return falloDeNube(error, "guardar los correos");
   return Response.json({

@@ -20,6 +20,7 @@ const PRUEBAS = [
   { archivo: "cuadricula.mjs", nombre: "Cuadricula de planillas", gasta: false },
   { archivo: "plantillas.mjs", nombre: "Plantillas y encabezados", gasta: false },
   { archivo: "nube.mjs", nombre: "Guardado en la nube", gasta: false },
+  { archivo: "sincronizar.mjs", nombre: "Sincronizar equipos", gasta: false },
   { archivo: "recargar.mjs", nombre: "Recargar sin perder nada", gasta: false },
   { archivo: "planillas-guardadas.mjs", nombre: "Planillas guardadas", gasta: false },
   { archivo: "movil.mjs", nombre: "Todo en el celular", gasta: false },

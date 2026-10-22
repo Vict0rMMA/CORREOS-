@@ -20,6 +20,13 @@ function idValido(id: string): boolean {
   return UUID.test(id);
 }
 
+/** Una hora en milisegundos, si es creible: ni antes de 2024 ni en el futuro. */
+function momentoValido(valor: unknown): Date | null {
+  if (typeof valor !== "number" || !Number.isFinite(valor)) return null;
+  if (valor < Date.UTC(2024, 0, 1) || valor > Date.now() + 60_000) return null;
+  return new Date(valor);
+}
+
 export async function GET(_request: Request, { params }: Contexto): Promise<Response> {
   const { id } = await params;
   if (!idValido(id)) return Response.json({ error: "Planilla no válida." }, { status: 400 });
@@ -59,7 +66,7 @@ export async function PUT(request: Request, { params }: Contexto): Promise<Respo
     return Response.json({ error: "La planilla es demasiado grande." }, { status: 413 });
   }
 
-  let cuerpo: { entrada?: unknown; salida?: unknown };
+  let cuerpo: { entrada?: unknown; salida?: unknown; creadaEn?: unknown; editadaEn?: unknown };
   try {
     cuerpo = JSON.parse(texto);
   } catch {
@@ -75,7 +82,11 @@ export async function PUT(request: Request, { params }: Contexto): Promise<Respo
   }
 
   const entrada = cuerpo.entrada;
-  const ahora = new Date().toISOString();
+  // La hora en que se edito de verdad, si la manda el navegador (al subir lo
+  // que estaba solo en un equipo, no es la hora de subirla).
+  const editada = momentoValido(cuerpo.editadaEn);
+  const creada = momentoValido(cuerpo.creadaEn);
+  const ahora = (editada ?? new Date()).toISOString();
 
   const { error } = await supabase.from("planillas").upsert(
     {
@@ -88,6 +99,7 @@ export async function PUT(request: Request, { params }: Contexto): Promise<Respo
       entrada,
       salida,
       actualizada_en: ahora,
+      ...(creada ? { creada_en: creada.toISOString() } : {}),
       borrado_en: null,
     },
     { onConflict: "id" },

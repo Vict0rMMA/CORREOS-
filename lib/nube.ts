@@ -48,9 +48,20 @@ async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T | null>
 // Planillas
 // ---------------------------------------------------------------------------
 
+/** Las ids borradas desde cualquier equipo, de la ultima lista pedida. */
+let ultimasBorradas: string[] = [];
+
 export async function listarPlanillas(): Promise<PlanillaResumen[] | null> {
-  const datos = await pedir<{ planillas: PlanillaResumen[] }>("/api/planillas");
+  const datos = await pedir<{ planillas: PlanillaResumen[]; borradas?: string[] }>(
+    "/api/planillas",
+  );
+  if (datos) ultimasBorradas = datos.borradas ?? [];
   return datos?.planillas ?? null;
+}
+
+/** Las planillas que alguien borro (en este equipo o en otro). */
+export function planillasBorradas(): string[] {
+  return ultimasBorradas;
 }
 
 export async function abrirPlanilla(id: string): Promise<PlanillaGuardada | null> {
@@ -62,10 +73,12 @@ export async function guardarPlanilla(
   id: string,
   entrada: SheetDoc,
   salida: SheetDoc | null,
+  /** Las horas de verdad (ms): cuando se empezo y cuando se edito. */
+  fechas: { creadaEn?: number; editadaEn?: number } = {},
 ): Promise<string | null> {
   const datos = await pedir<{ guardadaEn: string }>(`/api/planillas/${id}`, {
     method: "PUT",
-    body: JSON.stringify({ entrada, salida }),
+    body: JSON.stringify({ entrada, salida, ...fechas }),
   });
   return datos?.guardadaEn ?? null;
 }
@@ -78,9 +91,13 @@ export async function borrarPlanilla(id: string): Promise<boolean> {
 // Correos guardados
 // ---------------------------------------------------------------------------
 
-export async function listarGuardados(): Promise<HistoryItem[] | null> {
-  const datos = await pedir<{ guardados: HistoryItem[] }>("/api/guardados");
-  return datos?.guardados ?? null;
+/** Los correos de la nube y los ids de los que se borraron. */
+export async function listarGuardados(): Promise<{
+  guardados: HistoryItem[];
+  borrados: string[];
+} | null> {
+  const datos = await pedir<{ guardados: HistoryItem[]; borrados?: string[] }>("/api/guardados");
+  return datos ? { guardados: datos.guardados, borrados: datos.borrados ?? [] } : null;
 }
 
 export async function subirGuardados(items: HistoryItem[]): Promise<boolean> {

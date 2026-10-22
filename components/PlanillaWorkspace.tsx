@@ -46,6 +46,7 @@ import {
   borrarPlanilla,
   guardarPlanilla,
   listarPlanillas,
+  planillasBorradas,
   nuevoId,
 } from "@/lib/nube";
 import {
@@ -225,6 +226,38 @@ export function PlanillaWorkspace({
       if (cancelado || !lista) return;
       setEstadoNube(local?.pendiente ? "esperando" : "guardada");
 
+      // Todo en un solo sitio, para usarla igual desde el celular y el
+      // computador: lo que solo estaba en este equipo sube a la nube con sus
+      // horas de verdad, y lo borrado desde otro equipo se quita de aqui en
+      // vez de volver a subirlo. La abierta va aparte: se guarda sola.
+      const borradas = new Set(planillasBorradas());
+      const horaEnNube = new Map(
+        lista.map((planilla) => [planilla.id, new Date(planilla.actualizadaEn).getTime()]),
+      );
+      const quedan = archivadas.filter(
+        (item) => item.id === local?.id || !borradas.has(item.id),
+      );
+      if (quedan.length !== archivadas.length) setArchivo(saveArchive(quedan));
+      const porSubir = quedan.filter((item) => {
+        if (item.id === local?.id) return false;
+        const enNube = horaEnNube.get(item.id);
+        return enNube === undefined || item.actualizadaEn > enNube + 5000;
+      });
+      if (porSubir.length > 0) {
+        void (async () => {
+          let subidas = 0;
+          for (const item of porSubir) {
+            if (cancelado) return;
+            const hora = await guardarPlanilla(item.id, item.entrada, item.salida, {
+              creadaEn: item.creadaEn,
+              editadaEn: item.actualizadaEn,
+            });
+            if (hora) subidas += 1;
+          }
+          if (subidas > 0 && !cancelado) void refrescarLista();
+        })();
+      }
+
       if (local) {
         // Si esta misma planilla se cambio despues desde otro equipo, y aqui
         // no hay nada pendiente, manda la de la nube.
@@ -318,7 +351,10 @@ export function PlanillaWorkspace({
     if (!salida && esPlantillaIntacta(entrada.presente)) return true;
 
     setEstadoNube("guardando");
-    const hora = await guardarPlanilla(idPlanilla, entrada.presente, salida?.presente ?? null);
+    const hora = await guardarPlanilla(idPlanilla, entrada.presente, salida?.presente ?? null, {
+      creadaEn: creadaEn.current,
+      editadaEn: editadaEn.current,
+    });
     if (!hora) {
       setEstadoNube("error");
       return false;
@@ -359,7 +395,12 @@ export function PlanillaWorkspace({
       void fetch(`/api/planillas/${idPlanilla}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entrada: entrada.presente, salida: salida?.presente ?? null }),
+        body: JSON.stringify({
+          entrada: entrada.presente,
+          salida: salida?.presente ?? null,
+          creadaEn: creadaEn.current,
+          editadaEn: editadaEn.current,
+        }),
         keepalive: true,
       }).catch(() => undefined);
     };

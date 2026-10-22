@@ -9,7 +9,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Cuantas se ensenan en la lista. */
-const LIMITE = 60;
+const LIMITE = 200;
+
+/** Cuantas borradas se avisan. */
+const LIMITE_BORRADAS = 500;
 
 export async function GET(): Promise<Response> {
   const supabase = supabaseServidor();
@@ -24,6 +27,15 @@ export async function GET(): Promise<Response> {
 
   if (error) return falloDeNube(error, "leer las planillas");
 
+  // Las borradas desde otro equipo: el navegador las quita de su copia en
+  // vez de volver a subirlas.
+  const { data: borradas } = await supabase
+    .from("planillas")
+    .select("id")
+    .not("borrado_en", "is", null)
+    .order("borrado_en", { ascending: false })
+    .limit(LIMITE_BORRADAS);
+
   return Response.json({
     disponible: true,
     planillas: (data ?? []).map((fila) => ({
@@ -37,5 +49,6 @@ export async function GET(): Promise<Response> {
       actualizadaEn: fila.actualizada_en,
       traducida: fila.salida !== null,
     })),
+    borradas: (borradas ?? []).map((fila) => fila.id),
   });
 }
