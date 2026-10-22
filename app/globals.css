@@ -111,15 +111,6 @@
     touch-action: manipulation;
   }
 
-  /* iOS hace zoom al enfocar campos de menos de 16px: los subimos en movil */
-  @media (max-width: 640px) {
-    input,
-    textarea,
-    select {
-      font-size: 16px;
-    }
-  }
-
   /* Red de seguridad contra desbordes horizontales.
      Va solo en body y con `clip`, no con `hidden`: `overflow-x: hidden` en
      html y body a la vez convierte el body en un contenedor de scroll propio
@@ -127,6 +118,28 @@
      crear ese contenedor. */
   body {
     overflow-x: clip;
+  }
+}
+
+/* iOS hace zoom al enfocar campos de menos de 16px: en movil se suben.
+   Va fuera de las capas a proposito: dentro de `base` lo pisaban las clases
+   de tamano (text-sm) y los campos se quedaban en 14px. Cuenta tambien la
+   pantalla tactil, no solo el ancho: un telefono de lado mide 844px. */
+@media (max-width: 640px), (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Con el dedo, nada que se toque baja de 36px de alto, tambien con el
+   telefono de lado (ahi entran los tamanos de computador, mas apretados). */
+@media (pointer: coarse) {
+  main button,
+  main select,
+  main [role="tab"] {
+    min-height: 36px;
   }
 }
 

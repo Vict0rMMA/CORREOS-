@@ -29,7 +29,7 @@ export async function GET(_request: Request, { params }: Contexto): Promise<Resp
 
   const { data, error } = await supabase
     .from("planillas")
-    .select("id, entrada, salida, actualizada_en")
+    .select("id, entrada, salida, creada_en, actualizada_en")
     .eq("id", id)
     .is("borrado_en", null)
     .maybeSingle();
@@ -42,6 +42,7 @@ export async function GET(_request: Request, { params }: Contexto): Promise<Resp
     id: data.id,
     entrada: data.entrada,
     salida: data.salida,
+    creadaEn: data.creada_en,
     actualizadaEn: data.actualizada_en,
   });
 }

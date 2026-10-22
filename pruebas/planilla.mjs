@@ -151,7 +151,7 @@ const filasConDatos = async () => {
 // --- 1. Se escribe la planilla en español ---
 await page.getByLabel("Fecha").fill("14/10/2026");
 await page.getByLabel("Turno").fill("Día");
-await page.getByLabel("Supervisor").fill("Paula Andrea Ochoa");
+await page.getByLabel("Crew chief").fill("Paula Andrea Ochoa");
 
 await celda(0, 0).click();
 await page.evaluate((texto) => navigator.clipboard.writeText(texto), TABLA);

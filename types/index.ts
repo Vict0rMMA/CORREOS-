@@ -15,7 +15,7 @@ export type TextType = "email" | "report" | "message" | "sheet";
  * Los correos y las planillas no se mezclan: cada seccion tiene su borrador,
  * su resultado y sus guardados.
  */
-export type Seccion = "correos" | "planillas";
+export type Seccion = "correos" | "planillas" | "guardadas";
 
 /** Datos de cabecera de una planilla (los que van sobre la tabla). */
 export interface SheetMeta {

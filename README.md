@@ -45,6 +45,7 @@ cp .env.example .env.local
 | -------------------- | ----------- | -------------------------- | --------------------------------- |
 | `AI_API_KEY`         | Si          | —                          | Clave de la API de Google Gemini  |
 | `AI_MODEL`           | No          | `gemini-flash-lite-latest` | Modelo a usar                     |
+| `AI_API_KEY_RESPALDO`| No          | —                          | Segunda clave, si la primera se queda sin cupo |
 | `AI_MAX_INPUT_CHARS` | No          | `12000`                    | Limite de caracteres por peticion |
 
 La clave **solo se usa en el servidor** (rutas `app/api/*`); nunca se envia al navegador.
@@ -290,8 +291,8 @@ ejemplos, no asignaciones de nadie.
 
 ### El flujo
 
-1. Eliges plantilla. La **supervisora** (Paula Andrea Ochoa) y la **fecha de
-   hoy** ya vienen puestas; solo falta el turno.
+1. Eliges plantilla. El **crew chief** (Paula Andrea Ochoa) y la **fecha de
+   hoy** ya vienen puestos; solo falta el turno.
 2. Escribes o pegas la planilla **en espanol**.
 3. Pulsas **Traducir y generar Excel en ingles**.
 4. El resultado aparece en la pestana *Resultado en ingles*, **tambien
@@ -342,7 +343,7 @@ la planilla.
 El boton **Descargar Excel** genera un `.xlsx` de verdad (libreria `exceljs`):
 
 - Logo a la izquierda y titulo a la derecha en azul marino, con la fecha, el
-  turno y el supervisor debajo.
+  turno y el crew chief debajo.
 - Encabezado azul `1F3864` con letra blanca, filas alternas, bordes finos y
   texto ajustado. Cada bloque va con su titulo.
 - Las **horas se guardan como hora** (`07:30` con formato `hh:mm`), asi se
@@ -362,21 +363,35 @@ el mismo formato. Un **Reporte** de la pestana de correos tambien se puede bajar
 a Excel: sale numerado en una tabla `#` / `Description`, sin volver a llamar a
 la IA.
 
-### Donde se guarda
+### Donde se guarda: la pestana Guardadas
 
-En ningun sitio. La planilla vive mientras la pagina este abierta; no se guarda
-en el navegador ni en la nube. (La base de datos llegara mas adelante.)
+Cada planilla se guarda sola **en el navegador** con cada cambio (recargar la
+pagina no borra nada) y, si hay nube, tambien en Supabase. Todas quedan en la
+pestana **Guardadas**, de la mas reciente a la mas antigua y agrupadas por dia,
+y cada una dice:
+
+- de que plantilla es (Terminal, Hangar, Turnos nocturnos, En blanco),
+- el dia y el turno de la planilla, y el crew chief,
+- cuando se creo y cuando se modifico por ultima vez, con la hora,
+- cuantas filas tiene escritas, si ya esta en ingles, y si esta en la nube o
+  solo en este equipo.
+
+**Abrir y modificar** la carga en la pestana Planillas tal como estaba, con su
+resultado en ingles. Hay buscador (por fecha, turno, nombre, avion o lo que
+sea que tenga escrito) y filtro por plantilla. Borrar pide confirmacion.
+
+Empezar otra planilla o cambiar de plantilla ya no pregunta: la anterior queda
+en Guardadas. En el navegador caben las 80 mas recientes.
 
 ## Guardar en la nube (Supabase)
 
 Opcional. Sin configurar, la aplicacion funciona igual que siempre: los
-correos guardados viven en el navegador y la planilla mientras la pagina este
-abierta. Con Supabase:
+correos y las planillas guardadas viven en el navegador. Con Supabase:
 
 - **Las planillas se guardan solas** unos segundos despues de cada cambio
   (junto al titulo se ve "Guardada · 10:42"). Si se vuelve el mismo dia, se
-  sigue donde se dejo, y en **Mis planillas** estan las anteriores para
-  reabrirlas.
+  sigue donde se dejo, y en **Guardadas** estan tambien las de los otros
+  equipos para reabrirlas.
 - **Los correos guardados se suben a la nube**, tambien los que ya estaban en
   el navegador, asi no se pierden si se limpia.
 
@@ -491,6 +506,23 @@ Lo que hace la aplicacion para defenderse:
   responder, prueba con `AI_MODEL_FALLBACK`.
 - Avisa en pantalla si la espera pasa de cuatro segundos.
 
+### Que el cupo gratis dure
+
+- **Memoria de traducciones.** Lo que la IA ya tradujo una vez no se vuelve a
+  pedir: el navegador lo recuerda (hasta 3000 textos) y el servidor tambien
+  mientras esta encendido. Volver a traducir una planilla despues de cambiar
+  una casilla solo pide esa casilla; si todo se conoce, no se llama a la IA
+  y tarda menos de un segundo. Cada traduccion recordada pasa las mismas
+  comprobaciones que una nueva, y si se corrige a mano en el resultado en
+  ingles, la memoria se queda con la correccion al descargar.
+- **Lo fijo no pasa por la IA**: matriculas, horas, codigos, nombres y los
+  valores conocidos (Puntual, Ninguna, Noche...).
+- **Clave de respaldo.** Con `AI_API_KEY_RESPALDO` (otra clave gratuita, de
+  otra cuenta de Google) la aplicacion la usa sola cuando la principal se
+  queda sin cupo del dia o no responde. No chocan: es la misma IA con otro
+  cupo. Si se acaba todo, la pantalla lo dice con palabras: "Se acabo el cupo
+  gratis de la IA por hoy".
+
 Si hace falta que vaya siempre rapido, la solucion real es activar la
 facturacion de la API en Google AI Studio: con este uso el coste es minimo y
 desaparece el estrangulamiento.
@@ -509,7 +541,9 @@ se vuelve a abrir con `exceljs` y el PDF se descomprime para leer su texto).
 Cubren la interfaz en cinco tamanos, el celular, los tipos de texto, la
 traduccion, el encadenado, los documentos y su idioma, el logo, la cuadricula
 de planillas (escribir, pegar, deshacer, filas y columnas), el flujo completo de
-una planilla hasta su Excel, la firma escaneada, el buscador y el dictado.
+una planilla hasta su Excel, la pestana Guardadas, recargar sin perder nada,
+todo en el celular (cuatro tamanos de telefono, tambien de lado, tocando con
+el dedo), la firma escaneada, el buscador y el dictado.
 
 Si Chrome no esta en la ruta habitual se indica con `PAULA_CHROME`, y para
 probar contra otra direccion, con `PAULA_URL`.

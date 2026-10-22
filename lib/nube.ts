@@ -14,6 +14,9 @@ export interface PlanillaResumen {
   titulo: string;
   fecha: string;
   turno: string;
+  /** El campo "Crew chief" (en la base se llama supervisor). */
+  crewChief: string;
+  creadaEn: string;
   actualizadaEn: string;
   traducida: boolean;
 }
@@ -22,6 +25,7 @@ export interface PlanillaGuardada {
   id: string;
   entrada: SheetDoc;
   salida: SheetDoc | null;
+  creadaEn?: string;
   actualizadaEn: string;
 }
 
@@ -98,5 +102,12 @@ export async function borrarTodosLosGuardados(): Promise<boolean> {
 
 /** Un identificador nuevo para una planilla. */
 export function nuevoId(): string {
-  return crypto.randomUUID();
+  // randomUUID solo existe en paginas seguras (https o localhost): abriendo
+  // la aplicacion en el celular por la red de la casa, no estaria.
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

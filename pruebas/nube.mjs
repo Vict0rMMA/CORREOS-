@@ -113,16 +113,18 @@ informe.comprobar(
   `${await celda(0, 0).innerText()} · ${await page.getByLabel("Turno").inputValue()}`,
 );
 informe.comprobar(
-  "y la supervisora tambien",
-  (await page.getByLabel("Supervisor").inputValue()) === "Paula Andrea Ochoa",
+  "y el crew chief tambien",
+  (await page.getByLabel("Crew chief").inputValue()) === "Paula Andrea Ochoa",
 );
 
-const lista = page.locator("section:has-text('Mis planillas') li");
-informe.comprobar("aparece en Mis planillas", (await lista.count()) > 0, `${await lista.count()}`);
+await page.getByRole("tab", { name: /Guardadas/ }).click();
+await page.waitForTimeout(500);
+const lista = page.locator("li[data-planilla]");
+informe.comprobar("aparece en Guardadas", (await lista.count()) > 0, `${await lista.count()}`);
 
 // --- Se borra (y solo se marca) ---
-// La de esta prueba es la que esta abierta (marcada "Abierta" en la lista).
-const fila = lista.filter({ hasText: "Abierta" });
+// La de esta prueba es la que esta abierta (marcada "Abierta ahora").
+const fila = lista.filter({ hasText: "Abierta ahora" });
 informe.comprobar("la planilla abierta está marcada en la lista", (await fila.count()) === 1);
 
 const planillas = await fetch(`${URL_BASE}/api/planillas`).then((respuesta) => respuesta.json());

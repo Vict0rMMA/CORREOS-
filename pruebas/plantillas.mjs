@@ -366,7 +366,6 @@ for (const plantilla of ["terminal", "hangar", "custom"]) {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("tab", { name: /Planillas/ }).click();
   await page.getByRole("tab", { name: "Entrada en español" }).click().catch(() => undefined);
-  page.once("dialog", (dialogo) => void dialogo.accept());
   await page.getByLabel("Plantilla").selectOption(plantilla);
   await page.waitForTimeout(400);
 

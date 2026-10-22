@@ -225,6 +225,7 @@ export function Workspace() {
   }, []);
 
   const esPlanilla = seccion === "planillas";
+  const esGuardadas = seccion === "guardadas";
   const textType: TextType = prefs.textType;
 
   /** Titulo del documento, en el idioma del resultado. */
@@ -566,6 +567,15 @@ export function Workspace() {
     setMobileView("input");
   }, []);
 
+  const irAPlanilla = useCallback(() => {
+    setSeccion("planillas");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+  const verGuardadas = useCallback(() => {
+    setSeccion("guardadas");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   /** Vuelve al texto que habia antes del ultimo encadenado. */
   const undoChain = useCallback(() => {
     if (previousText === null) return;
@@ -676,7 +686,7 @@ export function Workspace() {
 
           {/* Las dos pestanas siguen montadas: cambiar de una a otra no puede
               borrar lo que se estaba escribiendo en la de al lado. */}
-          <div className={cn("flex-col gap-3 sm:gap-4", esPlanilla ? "hidden" : "flex")}>
+          <div className={cn("flex-col gap-3 sm:gap-4", seccion === "correos" ? "flex" : "hidden")}>
           <LanguageRoute
             source={lang}
             onSourceChange={(value) => {
@@ -831,9 +841,12 @@ export function Workspace() {
           />
           </div>
 
-          <div className={esPlanilla ? "block" : "hidden"}>
+          <div className={esPlanilla || esGuardadas ? "block" : "hidden"}>
             <PlanillaWorkspace
               activa={esPlanilla}
+              verGuardadas={esGuardadas}
+              onIrAPlanilla={irAPlanilla}
+              onVerGuardadas={verGuardadas}
               includeLogo={prefs.includeLogo}
               signature={prefs.signature}
               signatureImage={signatureImage}

@@ -33,6 +33,7 @@ export class AIConfigError extends Error {}
 export class AIRequestError extends Error {}
 
 let client: GoogleGenAI | null = null;
+let backupClient: GoogleGenAI | null | undefined;
 
 function getClient(): GoogleGenAI {
   const apiKey =
@@ -47,6 +48,19 @@ function getClient(): GoogleGenAI {
     client = new GoogleGenAI({ apiKey });
   }
   return client;
+}
+
+/**
+ * Clave de respaldo (opcional, AI_API_KEY_RESPALDO): otra clave gratuita, de
+ * otra cuenta de Google, con su propio cupo diario. Solo se usa cuando la
+ * principal se queda sin cupo o no responde, asi que las dos no chocan.
+ */
+function getBackupClient(): GoogleGenAI | null {
+  if (backupClient === undefined) {
+    const apiKey = process.env.AI_API_KEY_RESPALDO?.trim();
+    backupClient = apiKey ? new GoogleGenAI({ apiKey }) : null;
+  }
+  return backupClient;
 }
 
 /**
@@ -65,35 +79,64 @@ function isTransient(error: unknown): boolean {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Se acabo el cupo del dia: reintentar con la misma clave no sirve. */
+function isDailyQuota(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 429 &&
+    /per ?day|PerDay|daily/i.test(error.message)
+  );
+}
+
 /**
  * Reintenta con espera creciente solo los fallos temporales del proveedor y,
  * si el modelo principal sigue sin responder, prueba con el de emergencia.
+ * Si con la clave principal no hay manera (sin cupo, saturada), lo mismo con
+ * la clave de respaldo, si la hay.
  */
 async function withRetry<T>(
-  run: (model: string) => Promise<T>,
+  run: (model: string, ai: GoogleGenAI) => Promise<T>,
   attempts = 3,
 ): Promise<T> {
   let lastError: unknown;
+  const principal = getClient();
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await run(AI_MODEL);
+      return await run(AI_MODEL, principal);
     } catch (error) {
       lastError = error;
       if (!isTransient(error)) throw error;
-      if (attempt === attempts - 1) break;
+      // Sin cupo hoy: esperar no lo arregla, se pasa directo al plan B.
+      if (attempt === attempts - 1 || isDailyQuota(error)) break;
       console.warn(`[paula] reintento ${attempt + 1} tras fallo temporal de la IA`);
       await sleep(700 * 2 ** attempt);
     }
   }
 
-  // Ultimo recurso: el mismo trabajo con otro modelo.
-  if (AI_MODEL_FALLBACK && AI_MODEL_FALLBACK !== AI_MODEL) {
-    console.warn(`[paula] probando con el modelo de emergencia ${AI_MODEL_FALLBACK}`);
+  const modelos = [AI_MODEL_FALLBACK].filter((modelo) => modelo && modelo !== AI_MODEL);
+  const planB: [string, GoogleGenAI][] = modelos.map((modelo) => [modelo, principal]);
+  const respaldo = getBackupClient();
+  if (respaldo) {
+    planB.push([AI_MODEL, respaldo]);
+    for (const modelo of modelos) planB.push([modelo, respaldo]);
+  }
+
+  for (const [modelo, ai] of planB) {
+    const conRespaldo = ai !== principal;
+    console.warn(
+      `[paula] probando con ${modelo}${conRespaldo ? " y la clave de respaldo" : ""}`,
+    );
     try {
-      return await run(AI_MODEL_FALLBACK);
+      return await run(modelo, ai);
     } catch (error) {
-      console.error("[paula] el modelo de emergencia tampoco respondio:", error);
+      console.error(`[paula] ${modelo} tampoco respondio:`, error);
+      if (!isTransient(error)) {
+        // Una clave de respaldo mal puesta no debe tapar el error de verdad.
+        if (conRespaldo) continue;
+        throw error;
+      }
+      lastError = error;
     }
   }
 
@@ -131,8 +174,8 @@ export async function streamCompletion({
   retryUser,
 }: CompletionOptions): Promise<ReadableStream<Uint8Array>> {
   /** Abre el stream y devuelve el primer fragmento con texto. */
-  const start = async (model: string, prompt: string = user) => {
-    const chunks = await getClient().models.generateContentStream({
+  const start = async (model: string, ai: GoogleGenAI, prompt: string = user) => {
+    const chunks = await ai.models.generateContentStream({
       model,
       contents: prompt,
       config: {
@@ -168,7 +211,7 @@ export async function streamCompletion({
     return { first, readText };
   };
 
-  let { first: opening, readText } = await withRetry((model) => start(model));
+  let { first: opening, readText } = await withRetry((model, ai) => start(model, ai));
 
   // Verificacion sobre las primeras lineas, no sobre el texto entero: asi la
   // respuesta empieza a llegar enseguida en vez de esperar a que termine.
@@ -182,7 +225,7 @@ export async function streamCompletion({
 
     if (!verify(muestra)) {
       console.warn("[paula] respuesta rechazada por la verificacion; reintentando");
-      const segundo = await withRetry((model) => start(model, retryUser(muestra)));
+      const segundo = await withRetry((model, ai) => start(model, ai, retryUser(muestra)));
       opening = segundo.first;
       readText = segundo.readText;
     } else {
@@ -214,8 +257,8 @@ export async function completion({
   user,
   maxTokens = 1000,
 }: CompletionOptions): Promise<string> {
-  const response = await withRetry((model) =>
-    getClient().models.generateContent({
+  const response = await withRetry((model, ai) =>
+    ai.models.generateContent({
       model,
       contents: user,
       config: {
@@ -276,8 +319,8 @@ export async function jsonCompletion<T>({
   retryUser,
 }: JsonOptions<T>): Promise<JsonResult<T>> {
   const pedir = async (prompt: string): Promise<{ value: T; raw: string }> => {
-    const response = await withRetry((model) =>
-      getClient().models.generateContent({
+    const response = await withRetry((model, ai) =>
+      ai.models.generateContent({
         model,
         contents: prompt,
         config: {
@@ -342,8 +385,8 @@ export async function transcribe({
   mimeType,
   language,
 }: TranscriptionOptions): Promise<string> {
-  const response = await withRetry((model) =>
-    getClient().models.generateContent({
+  const response = await withRetry((model, ai) =>
+    ai.models.generateContent({
       model,
       contents: [
         {
@@ -411,6 +454,15 @@ export function toErrorResponse(error: unknown): Response {
       return Response.json(
         { error: `El modelo "${AI_MODEL}" no está disponible. Revisa AI_MODEL.` },
         { status: 503 },
+      );
+    }
+    if (isDailyQuota(error)) {
+      return Response.json(
+        {
+          error:
+            "Se acabó el cupo gratis de la IA por hoy. Mañana vuelve a funcionar solo; para no esperar, se puede poner una clave de respaldo.",
+        },
+        { status: 429 },
       );
     }
     if (error.status === 429) {

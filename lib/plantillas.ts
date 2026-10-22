@@ -225,7 +225,7 @@ export function crearPlanilla(id: SheetTemplateId, meta: Partial<SheetMeta> = {}
 
 /**
  * true si la tabla sigue igual que recien creada, sin nada escrito.
- * La fecha, el turno y el supervisor no cuentan: son del dia, no de la
+ * La fecha, el turno y el crew chief no cuentan: son del dia, no de la
  * plantilla, y se conservan al cambiar de una a otra.
  */
 export function esPlantillaIntacta(doc: SheetDoc): boolean {
@@ -233,6 +233,27 @@ export function esPlantillaIntacta(doc: SheetDoc): boolean {
   return (
     doc.title === nueva.title && JSON.stringify(doc.sections) === JSON.stringify(nueva.sections)
   );
+}
+
+/**
+ * Las filas que alguien escribio, de todos los bloques: las que no son iguales
+ * a como venian de fabrica (en la de noches la flota y la numeracion ya vienen
+ * puestas y no cuentan). Sirve para resumir una planilla guardada.
+ */
+export function filasEscritas(doc: SheetDoc): string[][] {
+  const nueva = crearPlanilla(doc.template);
+  const escritas: string[][] = [];
+  doc.sections.forEach((seccion, indice) => {
+    const deFabrica = nueva.sections[indice]?.rows ?? [];
+    seccion.rows.forEach((fila, numero) => {
+      const original = deFabrica[numero] ?? [];
+      const tocada = fila.some(
+        (celda, columna) => celda.trim() !== "" && celda.trim() !== (original[columna] ?? "").trim(),
+      );
+      if (tocada) escritas.push(fila);
+    });
+  });
+  return escritas;
 }
 
 /** La fecha de hoy como se escribe en espanol: 14/10/2026. */

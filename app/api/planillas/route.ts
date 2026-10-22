@@ -17,7 +17,7 @@ export async function GET(): Promise<Response> {
 
   const { data, error } = await supabase
     .from("planillas")
-    .select("id, plantilla, titulo, fecha, turno, actualizada_en, salida")
+    .select("id, plantilla, titulo, fecha, turno, supervisor, creada_en, actualizada_en, salida")
     .is("borrado_en", null)
     .order("actualizada_en", { ascending: false })
     .limit(LIMITE);
@@ -32,6 +32,8 @@ export async function GET(): Promise<Response> {
       titulo: fila.titulo,
       fecha: fila.fecha,
       turno: fila.turno,
+      crewChief: fila.supervisor,
+      creadaEn: fila.creada_en,
       actualizadaEn: fila.actualizada_en,
       traducida: fila.salida !== null,
     })),

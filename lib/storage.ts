@@ -55,7 +55,7 @@ export function loadPrefs(): Prefs {
         ? merged.signature
         : DEFAULT_SIGNATURE,
     includeLogo: merged.includeLogo !== false,
-    seccion: merged.seccion === "planillas" ? "planillas" : "correos",
+    seccion: merged.seccion === "planillas" || merged.seccion === "guardadas" ? merged.seccion : "correos",
   };
 }
 
@@ -225,4 +225,104 @@ export function loadSheetInProgress(): PlanillaEnCurso | null {
 
 export function saveSheetInProgress(planilla: PlanillaEnCurso): void {
   write(STORAGE_KEYS.sheet, planilla);
+}
+
+// ---------------------------------------------------------------------------
+// Planillas guardadas en este navegador
+// ---------------------------------------------------------------------------
+
+/**
+ * Una planilla de la pestana Guardadas, entera, para reabrirla y modificarla.
+ *
+ * Vive en este navegador aunque no haya nube: sin esto, empezar otra planilla
+ * hacia desaparecer la anterior.
+ */
+export interface PlanillaArchivada {
+  id: string;
+  entrada: SheetDoc;
+  salida: SheetDoc | null;
+  /** Cuando se empezo (ms). */
+  creadaEn: number;
+  /** Cuando se cambio por ultima vez (ms). */
+  actualizadaEn: number;
+}
+
+/** Cuantas se guardan como mucho; las mas viejas salen primero. */
+const ARCHIVO_LIMITE = 80;
+
+export function loadArchive(): PlanillaArchivada[] {
+  const guardadas = read<Partial<PlanillaArchivada>[]>(STORAGE_KEYS.archive);
+  if (!Array.isArray(guardadas)) return [];
+  const validas: PlanillaArchivada[] = [];
+  for (const item of guardadas) {
+    if (!item || typeof item.id !== "string" || !esPlanillaValida(item.entrada)) continue;
+    const salida = item.salida ?? null;
+    if (salida !== null && !esPlanillaValida(salida)) continue;
+    const actualizadaEn = typeof item.actualizadaEn === "number" ? item.actualizadaEn : 0;
+    validas.push({
+      id: item.id,
+      entrada: item.entrada,
+      salida,
+      creadaEn: typeof item.creadaEn === "number" ? item.creadaEn : actualizadaEn,
+      actualizadaEn,
+    });
+  }
+  return validas.sort((a, b) => b.actualizadaEn - a.actualizadaEn);
+}
+
+/**
+ * Guarda la lista y devuelve lo que de verdad quedo guardado: si el navegador
+ * se queda sin espacio, se van soltando las mas viejas hasta que quepa.
+ */
+export function saveArchive(lista: PlanillaArchivada[]): PlanillaArchivada[] {
+  let ordenada = [...lista]
+    .sort((a, b) => b.actualizadaEn - a.actualizadaEn)
+    .slice(0, ARCHIVO_LIMITE);
+  if (typeof window === "undefined") return ordenada;
+  while (ordenada.length > 0) {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.archive, JSON.stringify(ordenada));
+      return ordenada;
+    } catch {
+      ordenada = ordenada.slice(0, -1);
+    }
+  }
+  try {
+    window.localStorage.removeItem(STORAGE_KEYS.archive);
+  } catch {
+    /* sin permiso: la lista vive mientras la pagina este abierta */
+  }
+  return ordenada;
+}
+
+// ---------------------------------------------------------------------------
+// Memoria de traducciones de las planillas
+// ---------------------------------------------------------------------------
+
+/**
+ * Lo que la IA ya tradujo alguna vez (espanol -> ingles), para no volver a
+ * pedirlo. El servidor comprueba cada traduccion antes de usarla.
+ */
+const MEMORIA_LIMITE = 3000;
+
+export function loadTranslationMemory(): Record<string, string> {
+  const guardada = read<Record<string, unknown>>(STORAGE_KEYS.memory);
+  if (!guardada || typeof guardada !== "object" || Array.isArray(guardada)) return {};
+  const memoria: Record<string, string> = {};
+  for (const [original, traduccion] of Object.entries(guardada)) {
+    if (typeof traduccion === "string") memoria[original] = traduccion;
+  }
+  return memoria;
+}
+
+/** Suma lo nuevo; si no cabe, se olvida primero lo mas antiguo. */
+export function rememberTranslations(nuevas: Record<string, string>): void {
+  const entradas = Object.entries(nuevas);
+  if (entradas.length === 0) return;
+  const memoria = loadTranslationMemory();
+  for (const [original, traduccion] of entradas) {
+    delete memoria[original];
+    memoria[original] = traduccion;
+  }
+  write(STORAGE_KEYS.memory, Object.fromEntries(Object.entries(memoria).slice(-MEMORIA_LIMITE)));
 }

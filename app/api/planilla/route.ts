@@ -26,6 +26,13 @@ import type { Lang, SheetCell, SheetDoc, SheetSection } from "@/types";
  * las mismas filas, las mismas columnas y los datos protegidos copiados tal
  * cual. Despues se revisa; si algo no cuadra se devuelve la lista de celdas
  * con problema en vez del archivo.
+ *
+ * Lo que ya se tradujo una vez no se vuelve a pedir: el navegador manda su
+ * memoria de traducciones (y el servidor tiene la suya mientras esta
+ * encendido). Cada traduccion recordada pasa las mismas comprobaciones que
+ * una nueva, asi que una memoria vieja o tocada no puede colar nada. Asi el
+ * cupo gratuito de la IA dura mucho mas: volver a traducir tras cambiar una
+ * casilla solo pide esa casilla.
  */
 
 export const runtime = "nodejs";
@@ -34,12 +41,54 @@ export const maxDuration = 60;
 /** Tope de celdas por peticion: una planilla de verdad no llega ni de lejos. */
 const MAX_CELDAS = 4000;
 
+/** Tope de la memoria que manda el navegador, y de cada texto en ella. */
+const MAX_MEMORIA = 4000;
+const MAX_TEXTO_MEMORIA = 600;
+
+/** Lo traducido por la IA mientras el servidor sigue encendido. */
+const memoriaServidor = new Map<string, string>();
+const MAX_MEMORIA_SERVIDOR = 5000;
+
+function recordar(clave: string, traduccion: string): void {
+  memoriaServidor.delete(clave);
+  memoriaServidor.set(clave, traduccion);
+  if (memoriaServidor.size > MAX_MEMORIA_SERVIDOR) {
+    const masVieja = memoriaServidor.keys().next().value;
+    if (masVieja !== undefined) memoriaServidor.delete(masVieja);
+  }
+}
+
+/** Una traduccion recordada solo vale si pasa lo mismo que una nueva. */
+function traduccionFiable(original: string, traduccion: string, target: Lang): boolean {
+  return (
+    traduccion.trim() !== "" &&
+    traduccion.length <= MAX_TEXTO_MEMORIA * 2 &&
+    tokensPerdidos(original, traduccion).length === 0 &&
+    restosEnEspanol(traduccion, target).length === 0
+  );
+}
+
+/** La memoria que manda el navegador, sin nada que no sea texto. */
+function leerMemoria(valor: unknown): Map<string, string> {
+  const memoria = new Map<string, string>();
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) return memoria;
+  for (const [original, traduccion] of Object.entries(valor)) {
+    if (memoria.size >= MAX_MEMORIA) break;
+    if (typeof traduccion !== "string") continue;
+    if (original.length > MAX_TEXTO_MEMORIA || traduccion.length > MAX_TEXTO_MEMORIA * 2) continue;
+    memoria.set(original.trim(), traduccion.trim());
+  }
+  return memoria;
+}
+
 function badRequest(message: string): Response {
   return Response.json({ error: message }, { status: 400 });
 }
 
 /** Comprueba que el cuerpo es una planilla con la forma esperada. */
-function parseBody(body: unknown): { doc: SheetDoc; target: Lang } | string {
+function parseBody(
+  body: unknown,
+): { doc: SheetDoc; target: Lang; memoria: Map<string, string> } | string {
   if (typeof body !== "object" || body === null) return "Petición inválida.";
   const raw = body as Record<string, unknown>;
 
@@ -59,7 +108,7 @@ function parseBody(body: unknown): { doc: SheetDoc; target: Lang } | string {
   }
   if (celdas > MAX_CELDAS) return "La planilla es demasiado grande.";
 
-  return { doc, target: raw.target };
+  return { doc, target: raw.target, memoria: leerMemoria(raw.memoria) };
 }
 
 interface Pieza {
@@ -89,6 +138,8 @@ export async function POST(request: Request): Promise<Response> {
   const yaPedido = new Map<string, string>();
 
   const encolar = (texto: string): Pieza => {
+    const recordada = validado.memoria.get(texto) ?? memoriaServidor.get(`${target}:${texto}`);
+    if (recordada && traduccionFiable(texto, recordada, target)) return { fijo: recordada };
     const existente = yaPedido.get(texto);
     if (existente) return { id: existente };
     const id = `c${porTraducir.length + 1}`;
@@ -163,6 +214,14 @@ export async function POST(request: Request): Promise<Response> {
   // El mapa de ids al reves, para poder recuperar el texto original.
   const textoPorId = new Map([...yaPedido].map(([texto, id]) => [id, texto]));
 
+  /** Lo que la IA tradujo esta vez, para que el navegador lo recuerde. */
+  const aprendidas: Record<string, string> = {};
+  for (const celda of porTraducir) {
+    const traducida = traducciones.get(celda.id)?.trim();
+    if (!traducida || !traduccionFiable(celda.text, traducida, target)) continue;
+    aprendidas[celda.text] = traducida;
+  }
+
   const leerCelda = (pieza: Pieza): string => {
     if (pieza.id === undefined) return pieza.fijo ?? "";
     const traducida = traducciones.get(pieza.id);
@@ -203,7 +262,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  return Response.json({ doc: salida });
+  // Solo se recuerda lo de una planilla que salio bien entera.
+  for (const [original, traduccion] of Object.entries(aprendidas)) {
+    recordar(`${target}:${original}`, traduccion);
+  }
+  return Response.json({ doc: salida, aprendidas, pedidasALaIA: porTraducir.length });
 }
 
 /** Lo que devolvio el modelo, en un mapa id -> texto. */

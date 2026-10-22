@@ -40,9 +40,9 @@ async function escribir(fila, columna, texto) {
 const hoy = new Date();
 const fechaDeHoy = `${String(hoy.getDate()).padStart(2, "0")}/${String(hoy.getMonth() + 1).padStart(2, "0")}/${hoy.getFullYear()}`;
 informe.comprobar(
-  "la supervisora ya viene puesta",
-  (await page.getByLabel("Supervisor").inputValue()) === "Paula Andrea Ochoa",
-  await page.getByLabel("Supervisor").inputValue(),
+  "el crew chief ya viene puesto",
+  (await page.getByLabel("Crew chief").inputValue()) === "Paula Andrea Ochoa",
+  await page.getByLabel("Crew chief").inputValue(),
 );
 informe.comprobar(
   "y la fecha de hoy también",
@@ -125,10 +125,8 @@ informe.comprobar(
   await celda(5, 0).innerText(),
 );
 
-// Se deja la planilla como estaba para el resto de la prueba. Solo el
-// primer cambio pregunta (hay datos escritos); el segundo parte de una
-// planilla limpia y no pregunta nada.
-page.once("dialog", (dialogo) => void dialogo.accept());
+// Se deja la planilla como estaba para el resto de la prueba. Cambiar de
+// plantilla ya no pregunta: la escrita queda en Guardadas.
 await page.getByLabel("Plantilla").selectOption("hangar");
 await page.waitForTimeout(300);
 await page.getByLabel("Plantilla").selectOption("terminal");

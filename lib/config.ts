@@ -33,6 +33,8 @@ export const STORAGE_KEYS = {
   // ultimo resultado de Correos y la planilla abierta.
   result: "paula:resultado",
   sheet: "paula:planilla",
+  archive: "paula:planillas-guardadas",
+  memory: "paula:memoria-traduccion",
   // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
   // El numero sube cuando hay que descartar lo guardado en los navegadores:
   // asi nadie se queda con una firma que ya no corresponde.
