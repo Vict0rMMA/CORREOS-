@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { labels, longDate, photoCaption } from "@/lib/export/i18n";
 import { parseSignature, splitClosing } from "@/lib/export/layout";
 import { LOGO_PATH } from "@/lib/export/logo";
@@ -52,7 +55,7 @@ export function PrintSheet({
 
       <div className="print-head">
         <h1>{title.toUpperCase()}</h1>
-        <span>{longDate(lang)}</span>
+        <FechaDeHoy lang={lang} />
       </div>
       {subject ? (
         <p className="print-subject">
@@ -127,4 +130,21 @@ export function PrintSheet({
       ) : null}
     </div>
   );
+}
+
+/**
+ * La fecha del dia, puesta en el navegador y no en el servidor: el servidor
+ * esta en hora UTC y desde las 7 p. m. de Colombia ya es "manana" alla (y
+ * React se quejaba de que el texto no coincidia). Se vuelve a calcular al
+ * imprimir, por si la pagina se quedo abierta de un dia para otro.
+ */
+function FechaDeHoy({ lang }: { lang: Lang }) {
+  const [texto, setTexto] = useState("");
+  useEffect(() => {
+    const poner = () => setTexto(longDate(lang));
+    poner();
+    window.addEventListener("beforeprint", poner);
+    return () => window.removeEventListener("beforeprint", poner);
+  }, [lang]);
+  return <span>{texto}</span>;
 }
