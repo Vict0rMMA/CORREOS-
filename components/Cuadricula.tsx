@@ -11,8 +11,9 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardPaste, Copy, PencilLine, Table2 } from "lucide-react";
+import { BoxSelect, ClipboardPaste, Copy, PencilLine, Pin, Table2 } from "lucide-react";
 import { readClipboard, writeClipboardTable } from "@/lib/clipboard";
+import { STORAGE_KEYS } from "@/lib/config";
 import {
   bloqueAHtml,
   borrarColumnas,
@@ -99,6 +100,56 @@ function fondoDeCelda(opciones: {
   return opciones.fija ? "bg-surface" : "";
 }
 
+/** Avisa a las demas cuadriculas de la pantalla de que se cambio el fijado. */
+const EVENTO_FIJAR = "paula:fijar-columna";
+
+/**
+ * Si la primera columna (el empleado) se queda fija al desplazarse de lado.
+ *
+ * En el computador ayuda: hay sitio y se sabe de quien es cada fila. En el
+ * celular estorbaba: ocupaba media pantalla y las demas columnas pasaban por
+ * debajo, asi que no se podia ver ni marcar bien lo de al lado. Por eso viene
+ * fija solo con raton y pantalla ancha, y la persona lo cambia con un boton
+ * (vale para todas las tablas y se recuerda).
+ */
+function useFijarPrimera(): [boolean, () => void] {
+  const [fijar, setFijar] = useState(false);
+
+  useEffect(() => {
+    const leer = () => {
+      let guardado: string | null = null;
+      try {
+        guardado = window.localStorage.getItem(STORAGE_KEYS.pinColumn);
+      } catch {
+        /* sin permiso: se usa lo de por defecto */
+      }
+      setFijar(
+        guardado === null
+          ? window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches
+          : guardado === "1",
+      );
+    };
+    leer();
+    window.addEventListener(EVENTO_FIJAR, leer);
+    return () => window.removeEventListener(EVENTO_FIJAR, leer);
+  }, []);
+
+  const alternar = useCallback(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.pinColumn, fijar ? "0" : "1");
+    } catch {
+      /* sin permiso: vale mientras la pagina este abierta */
+    }
+    window.dispatchEvent(new Event(EVENTO_FIJAR));
+    setFijar(!fijar);
+  }, [fijar]);
+
+  return [fijar, alternar];
+}
+
+/** La sombra que separa la columna fija de lo que pasa por debajo. */
+const SOMBRA_FIJA = "shadow-[6px_0_8px_-6px_rgb(0_0_0/0.55)]";
+
 export function Cuadricula({
   seccion,
   onChange,
@@ -124,6 +175,18 @@ export function Cuadricula({
 
   const alto = seccion.rows.length;
   const ancho = seccion.columns.length;
+
+  const [fijarPrimera, alternarFijar] = useFijarPrimera();
+
+  /**
+   * Modo marcar: con el dedo no se puede arrastrar para marcar (arrastrar
+   * mueve la tabla), y tocar una casilla la abre para escribir. Con este modo,
+   * un toque marca donde empieza y el siguiente donde acaba; tocar un titulo
+   * marca la columna entera. Asi se copian varias casillas en el celular.
+   */
+  const [marcando, setMarcando] = useState(false);
+  /** Donde empezo la marca en curso, y si va por casillas, filas o columnas. */
+  const ancla = useRef<{ tipo: "casilla" | "fila" | "columna" } | null>(null);
 
   const anchoDe = useCallback(
     (columna: number) => anchos[columna] ?? ANCHO_POR_DEFECTO,
@@ -442,6 +505,11 @@ export function Cuadricula({
 
   const alBajarPuntero = (celda: Celda) => (evento: PointerEvent<HTMLElement>) => {
     if (evento.button !== 0) return;
+    if (marcando) {
+      marcarCon(celda);
+      return;
+    }
+    ancla.current = null;
     toque.current = {
       yaActiva: activa.fila === celda.fila && activa.columna === celda.columna,
       tipo: evento.pointerType,
@@ -452,13 +520,72 @@ export function Cuadricula({
     if (!evento.shiftKey) setExtremo(celda);
   };
 
+  /** En modo marcar: el primer toque empieza la marca y el segundo la acaba. */
+  const marcarCon = (celda: Celda) => {
+    confirmar();
+    const previa = ancla.current;
+    if (celda.fila === FILA_ENCABEZADO) {
+      // Un titulo marca la columna entera; otro titulo despues, hasta esa.
+      if (previa?.tipo === "columna") {
+        setExtremo({ fila: alto - 1, columna: celda.columna });
+        ancla.current = null;
+      } else {
+        setActiva({ fila: 0, columna: celda.columna });
+        setExtremo({ fila: alto - 1, columna: celda.columna });
+        ancla.current = { tipo: "columna" };
+      }
+      return;
+    }
+    if (previa?.tipo === "casilla") {
+      setExtremo(celda);
+      ancla.current = null;
+      return;
+    }
+    setActiva(celda);
+    setExtremo(celda);
+    ancla.current = { tipo: "casilla" };
+  };
+
+  /** El numero de la fila marca la fila entera (con Mayus o marcando, hasta otra). */
+  const alTocarNumero = (fila: number) => (evento: PointerEvent<HTMLElement>) => {
+    if (evento.button !== 0) return;
+    // El numero no recibe el foco: sin esto se iria al resto de la pagina y
+    // Ctrl + C ya no llegaria a la tabla.
+    evento.preventDefault();
+    confirmar();
+    const previa = ancla.current;
+    const extiende = previa?.tipo === "fila" && (marcando || evento.shiftKey);
+    const inicio = extiende ? activa.fila : fila;
+    if (extiende) {
+      setExtremo({ fila, columna: ancho - 1 });
+      if (marcando) ancla.current = null;
+    } else {
+      setActiva({ fila, columna: 0 });
+      setExtremo({ fila, columna: ancho - 1 });
+      ancla.current = { tipo: "fila" };
+    }
+    // El foco a la casilla de inicio, sin saltar de lado.
+    contenedor.current
+      ?.querySelector<HTMLElement>(`[data-celda="${inicio}:0"]`)
+      ?.focus({ preventScroll: true });
+  };
+
+  const alternarMarcar = () => {
+    ancla.current = null;
+    setMarcando(!marcando);
+    if (!marcando) {
+      confirmar();
+      onMensaje?.("Toca la primera casilla y después la última", "info");
+    }
+  };
+
   /**
    * Un toque basta para escribir: con el dedo siempre, y con el raton al
    * volver a pulsar la casilla que ya estaba elegida. El doble clic sigue
    * valiendo, pero quien no lo conoce no se queda atascado.
    */
   const alPulsar = (celda: Celda) => (evento: MouseEvent<HTMLElement>) => {
-    if (readOnly || evento.shiftKey || editando) return;
+    if (readOnly || evento.shiftKey || editando || marcando) return;
     if (toque.current.tipo === "touch" || toque.current.yaActiva) empezarAEditar(celda);
   };
 
@@ -629,6 +756,14 @@ export function Cuadricula({
       {readOnly ? null : (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
+            <BotonBarra
+              onClick={alternarMarcar}
+              activo={marcando}
+              titulo="Marcar varias casillas tocando la primera y la última"
+            >
+              <BoxSelect aria-hidden className="size-3.5" />
+              {marcando ? "Marcando" : "Marcar varias"}
+            </BotonBarra>
             <BotonBarra onClick={() => void copiarSeleccion()} titulo="Copiar lo marcado (Ctrl + C)">
               <Copy aria-hidden className="size-3.5" />
               Copiar
@@ -650,7 +785,31 @@ export function Cuadricula({
             <BotonBarra onClick={acciones.borrarColumna}>
               − Columna{columnasMarcadas > 1 ? `s (${columnasMarcadas})` : ""}
             </BotonBarra>
+            <span aria-hidden className="mx-1 h-4 w-px bg-line" />
+            <BotonBarra
+              onClick={alternarFijar}
+              activo={fijarPrimera}
+              titulo="Dejar fija la primera columna al moverse de lado"
+            >
+              <Pin aria-hidden className="size-3.5" />
+              Fijar 1.ª columna
+            </BotonBarra>
           </div>
+
+          {marcando ? (
+            <p
+              aria-live="polite"
+              className="rounded-xl border border-accent/40 bg-accent-soft/50 px-3 py-2 text-[13px] leading-snug text-ink-soft"
+            >
+              <span className="font-semibold text-ink">
+                {filasMarcadas * columnasMarcadas === 1
+                  ? "1 casilla marcada. "
+                  : `Marcadas: ${filasMarcadas} ${filasMarcadas === 1 ? "fila" : "filas"} × ${columnasMarcadas} ${columnasMarcadas === 1 ? "columna" : "columnas"}. `}
+              </span>
+              Toca la primera casilla y luego la última; un título marca la columna entera y
+              el número, la fila. Después pulsa <strong className="text-ink">Copiar</strong>.
+            </p>
+          ) : null}
 
           <label className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-2 py-1.5 focus-within:border-accent">
             <PencilLine aria-hidden className="ml-1 size-4 shrink-0 text-muted" />
@@ -761,10 +920,10 @@ export function Cuadricula({
                     onClick={alPulsar(celda)}
                     onContextMenu={alMenuContextual(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
-                    style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
+                    style={columna === 0 && fijarPrimera ? { left: COLUMNA_NUMEROS } : undefined}
                     className={cn(
                       "sticky top-0 border border-[#2b4572] p-0 text-left align-middle outline-none",
-                      columna === 0 ? "z-30" : "z-20",
+                      columna === 0 && fijarPrimera ? cn("z-30", SOMBRA_FIJA) : "z-20",
                       marcada ? "bg-[#2a4a84]" : "bg-[#1f3864]",
                       enFoco && "ring-2 ring-inset ring-white/70",
                     )}
@@ -814,7 +973,18 @@ export function Cuadricula({
               <tr key={indiceFila} role="row">
                 <th
                   scope="row"
-                  className="sticky left-0 z-10 border border-line bg-surface-soft px-1 text-center text-[11px] font-normal tabular-nums text-muted"
+                  onPointerDown={alTocarNumero(indiceFila)}
+                  title="Marcar la fila entera"
+                  className={cn(
+                    "sticky left-0 z-10 cursor-pointer select-none border border-line px-1 text-center text-[11px] font-normal tabular-nums",
+                    seleccion.col1 === 0 &&
+                      seleccion.col2 === ancho - 1 &&
+                      indiceFila >= seleccion.fila1 &&
+                      indiceFila <= seleccion.fila2 &&
+                      seleccion.fila1 >= 0
+                      ? "bg-accent-soft text-accent"
+                      : "bg-surface-soft text-muted",
+                  )}
                 >
                   {indiceFila + 1}
                 </th>
@@ -839,17 +1009,19 @@ export function Cuadricula({
                       onClick={alPulsar(celda)}
                     onContextMenu={alMenuContextual(celda)}
                     onDoubleClick={() => empezarAEditar(celda)}
-                      style={columna === 0 ? { left: COLUMNA_NUMEROS } : undefined}
+                      style={columna === 0 && fijarPrimera ? { left: COLUMNA_NUMEROS } : undefined}
                       className={cn(
                         "border border-line p-0 align-middle outline-none",
                         // Con quince o veinte columnas hay que desplazarse de
-                        // lado: el empleado se queda a la vista.
-                        columna === 0 && "sticky z-10 border-r-line-strong",
+                        // lado: si se fija, el empleado se queda a la vista.
+                        columna === 0 &&
+                          fijarPrimera &&
+                          cn("sticky z-10 border-r-line-strong", SOMBRA_FIJA),
                         fondoDeCelda({
                           marcada,
                           conAviso: Boolean(conAviso),
                           alterna: indiceFila % 2 === 1,
-                          fija: columna === 0,
+                          fija: columna === 0 && fijarPrimera,
                         }),
                         conAviso && "ring-1 ring-inset ring-danger/60",
                         enFoco && "ring-2 ring-inset ring-accent",
@@ -939,20 +1111,29 @@ function BotonBarra({
   children,
   onClick,
   titulo,
+  activo,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   titulo?: string;
+  /** Para los botones que se quedan encendidos (Marcar, Fijar). */
+  activo?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={titulo}
+      aria-pressed={activo}
       // Sin esto, pulsar el boton le quita el foco a la casilla y Copiar o
       // Pegar ya no sabrian donde estaba la seleccion en el celular.
       onPointerDown={(evento) => evento.preventDefault()}
-      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-surface-soft px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-accent/40 hover:text-accent"
+      className={cn(
+        "inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors",
+        activo
+          ? "border-accent bg-accent text-accent-ink"
+          : "border-line bg-surface-soft text-ink-soft hover:border-accent/40 hover:text-accent",
+      )}
     >
       {children}
     </button>

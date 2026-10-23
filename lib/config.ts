@@ -35,6 +35,8 @@ export const STORAGE_KEYS = {
   sheet: "paula:planilla",
   archive: "paula:planillas-guardadas",
   memory: "paula:memoria-traduccion",
+  // Si la primera columna de las planillas se queda fija al moverse de lado.
+  pinColumn: "paula:fijar-columna",
   // La firma escaneada va aparte: pesa mucho mas que el resto de ajustes.
   // El numero sube cuando hay que descartar lo guardado en los navegadores:
   // asi nadie se queda con una firma que ya no corresponde.

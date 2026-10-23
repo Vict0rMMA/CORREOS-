@@ -18,6 +18,7 @@ const PRUEBAS = [
   { archivo: "guardados.mjs", nombre: "Guardados y buscador", gasta: false },
   { archivo: "pestanas.mjs", nombre: "Pestanas separadas", gasta: false },
   { archivo: "cuadricula.mjs", nombre: "Cuadricula de planillas", gasta: false },
+  { archivo: "marcar.mjs", nombre: "Marcar y copiar en cualquier pantalla", gasta: false },
   { archivo: "plantillas.mjs", nombre: "Plantillas y encabezados", gasta: false },
   { archivo: "nube.mjs", nombre: "Guardado en la nube", gasta: false },
   { archivo: "sincronizar.mjs", nombre: "Sincronizar equipos", gasta: false },

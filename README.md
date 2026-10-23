@@ -269,6 +269,15 @@ pasa al ingles y deja el `.xlsx` listo para descargar.
   ninguna casilla antes. Si lo pegado no cabe, la cuadricula **crece**: nunca
   se pierde una fila. Lo copiado de un PDF o de una pantalla (con espacios en
   vez de tabuladores) tambien se reparte por columnas.
+- **Marcar varias** (para el dedo, en el celular y la tableta, donde arrastrar
+  mueve la tabla): un toque marca la primera casilla y otro la ultima; tocar
+  un titulo marca la columna entera, y otro titulo despues, hasta esa. Tocar
+  el **numero de una fila** la marca entera (con raton, Mayus+clic en otro
+  numero marca varias). Despues, **Copiar**.
+- **Fijar 1.ª columna**: el empleado se queda a la vista al moverse de lado.
+  Viene fija solo en el computador; en el celular y la tableta ocupaba media
+  pantalla y las demas columnas pasaban por debajo. Se recuerda y vale para
+  todas las tablas.
 - **Supr** vacia las celdas sin tocar la estructura.
 - Se anaden y se quitan filas y columnas, se cambian los encabezados y se
   arrastra el borde de una columna para darle mas ancho.
